@@ -131,7 +131,7 @@ export default function CreativeOptimizer() {
                     <img
                       src={thumbMap[a.ad_id]}
                       alt=""
-                      className="w-24 h-24 object-cover rounded-md border shrink-0"
+                      className="w-24 h-24 object-contain rounded-md border bg-muted shrink-0"
                     />
                   )}
                   <div className="flex-1 space-y-1">
