@@ -149,24 +149,30 @@ Deno.serve(async (req) => {
       const budgetCents = Math.round(Number(daily_budget || 0) * 100);
       let targeting: any = { geo_locations: { countries: ['US', 'CA'] } };
       if (Array.isArray(body.locations) && body.locations.length) {
-        // Build geo-targeting from selected store locations (resolve city keys)
-        const cities: any[] = [];
-        const seenKeys = new Set<string>();
+        // Build geo-targeting from each store's full address: geocode to lat/lng,
+        // then target a 4-mile radius around that exact address.
+        const custom_locations: any[] = [];
         for (const loc of body.locations) {
-          if (!loc.city) continue;
+          const addr = [loc.address, loc.city, loc.province, loc.postal_code, loc.country || 'Canada']
+            .filter(Boolean).join(', ');
+          if (!addr) continue;
           try {
-            const sr = await fetch(`${GRAPH}/search?type=adgeolocation&location_types=city&q=${encodeURIComponent(loc.city)}&country_code=CA&limit=5`, { headers });
-            const sd: any = await sr.json();
-            const match = (sd.data || []).find((c: any) =>
-              !loc.province || (c.region && c.region.name && c.region.name.toLowerCase() === String(loc.province).toLowerCase()));
-            const city = match || (sd.data || [])[0];
-            if (city && city.key && !seenKeys.has(city.key)) {
-              seenKeys.add(city.key);
-              cities.push({ key: city.key, radius: loc.radius || 10, distance_unit: 'mile' });
+            const gres = await fetch(
+              `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addr)}`,
+              { headers: { 'User-Agent': 'AdPilot/1.0 (hellcrust-ads)' } },
+            );
+            const gdata: any = await gres.json();
+            if (gdata && gdata[0]) {
+              custom_locations.push({
+                latitude: gdata[0].lat,
+                longitude: gdata[0].lon,
+                radius: loc.radius || 4,
+                distance_unit: 'mile',
+              });
             }
-          } catch (_e) { /* skip unresolved city */ }
+          } catch (_e) { /* skip unresolved address */ }
         }
-        if (cities.length) targeting = { geo_locations: { cities } };
+        if (custom_locations.length) targeting = { geo_locations: { custom_locations } };
       } else if (body.audience_id) {
         if (body.audience_kind === 'saved') {
           const tr = await fetch(`${GRAPH}/${body.audience_id}?fields=targeting`, { headers });

@@ -73,7 +73,7 @@ export default function QuickSales() {
       const locations = selectedLocs
         .map((id) => storeLocations.find((x) => x.id === id))
         .filter(Boolean)
-        .map((l) => ({ city: l.city, province: l.province, country: 'CA' }));
+        .map((l) => ({ address: l.address, city: l.city, province: l.province, postal_code: l.postal_code, country: 'CA' }));
       const res = await base44.functions.invoke('metaAds', {
         action: 'create_ad',
         account_id: accountId,
@@ -157,7 +157,7 @@ export default function QuickSales() {
             <MapPin className="h-5 w-5" /> 2. Select location(s) to target
           </CardTitle>
           <CardDescription>
-            {selectedLocs.length} selected — your ad will geo-target these cities (10-mile radius each).
+            {selectedLocs.length} selected — your ad will geo-target a 4-mile radius around each address.
           </CardDescription>
         </CardHeader>
         <CardContent>
