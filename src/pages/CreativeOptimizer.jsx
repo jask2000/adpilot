@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Sparkles, AlertCircle, Wand2, CheckCircle2 } from 'lucide-react';
+import { Loader2, Sparkles, AlertCircle, Wand2, CheckCircle2, ImagePlus, X } from 'lucide-react';
 
 export default function CreativeOptimizer() {
   const [accLoading, setAccLoading] = useState(true);
@@ -16,6 +16,7 @@ export default function CreativeOptimizer() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [picked, setPicked] = useState([]); // [{ name, url }] data URLs
 
   useEffect(() => {
     (async () => {
@@ -47,6 +48,7 @@ export default function CreativeOptimizer() {
       const res = await base44.functions.invoke('optimizeCreatives', {
         auto_tune: true,
         generate: true,
+        variant_images: picked.map((p) => p.url),
       });
       setResult(res.data);
     } catch (e) {
@@ -55,6 +57,25 @@ export default function CreativeOptimizer() {
       setLoading(false);
     }
   };
+
+  const handlePick = (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    Promise.all(
+      files.map(
+        (file) =>
+          new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ name: file.name, url: reader.result });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          })
+      )
+    ).then((items) => setPicked((prev) => [...prev, ...items]));
+  };
+
+  const removePicked = (i) => setPicked((prev) => prev.filter((_, idx) => idx !== i));
 
   const thumbMap = {};
   (result?.ads || []).forEach((a) => {
@@ -88,6 +109,37 @@ export default function CreativeOptimizer() {
         </Button>
       </div>
 
+      <Card>
+        <CardContent className="py-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <ImagePlus className="h-4 w-4" /> Your images (optional)
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Upload your own images and the optimizer will build new paused variants from
+            the best-performing ad — applying AI-suggested headline/message improvements.
+            Leave empty to let the AI generate a variant instead.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {picked.map((p, i) => (
+              <div key={i} className="relative w-20 h-20 rounded-md overflow-hidden border bg-muted">
+                <img src={p.url} alt={p.name} className="w-full h-full object-contain" />
+                <button
+                  type="button"
+                  onClick={() => removePicked(i)}
+                  className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-input text-muted-foreground hover:bg-accent">
+              <ImagePlus className="h-5 w-5" />
+              <input type="file" accept="image/*" multiple className="hidden" onChange={handlePick} />
+            </label>
+          </div>
+        </CardContent>
+      </Card>
+
       {accLoading && <p className="text-muted-foreground text-sm">Loading…</p>}
       {error && (
         <div className="flex items-start gap-2 text-sm text-destructive">
@@ -116,7 +168,7 @@ export default function CreativeOptimizer() {
                 )}
                 <div>
                   {result.generated.ok
-                    ? `New paused variant created (ad ${result.generated.new_ad_id}) from best performer.`
+                    ? `${result.generated.count || 1} new paused variant(s) created from the best performer.`
                     : `Variant generation failed: ${result.generated.error}`}
                 </div>
               </CardContent>

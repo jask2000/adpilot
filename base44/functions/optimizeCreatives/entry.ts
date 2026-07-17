@@ -62,7 +62,8 @@ Deno.serve(async (req) => {
       'analyze the visual and its metrics to score it 0-100 and recommend an action. ' +
       'Actions: "keep" (fine), "pause" (poor — meaningful spend with low CTR / high CPC), "boost" (top performer worth more budget). ' +
       'For strong performers, set generate_variant=true and provide a concrete new_image_prompt for a better A/B test variation. ' +
-      'Return analyses for every ad_id provided.\n\nAds:\n' +
+      'When the user will supply their own images, also suggest improved ad copy: new_headline (short, punchy) and new_message (1-2 line body text) ' +
+      'that would outperform the original. Return analyses for every ad_id provided.\n\nAds:\n' +
       JSON.stringify(items.map((i: any) => ({ ad_id: i.ad_id, name: i.name, status: i.status, spend: i.spend, clicks: i.clicks, ctr: i.ctr, cpc: i.cpc })), null, 2);
 
     const schema = {
@@ -79,6 +80,8 @@ Deno.serve(async (req) => {
               action: { type: 'string', enum: ['keep', 'pause', 'boost'] },
               generate_variant: { type: 'boolean' },
               new_image_prompt: { type: 'string' },
+              new_headline: { type: 'string' },
+              new_message: { type: 'string' },
             },
             required: ['ad_id', 'score', 'reason', 'action'],
           },
@@ -153,25 +156,25 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Generate one new paused variant from the best performer
+    // 3. Generate new paused variant(s) from the best performer.
+    //    If the user supplied images (variant_images, base64 data URLs), use those;
+    //    otherwise fall back to AI-generated image. Apply AI-suggested text improvements
+    //    (new_headline / new_message) to the new creative's link_data.
     let generated: any = null;
     if (generate) {
       const best = analyses
-        .filter((a: any) => a.generate_variant && a.new_image_prompt && itemMap[a.ad_id]?.thumbnail)
+        .filter((a: any) => a.generate_variant && itemMap[a.ad_id]?.creative_id)
         .sort((x: any, y: any) => (y.score || 0) - (x.score || 0))[0];
+      const userImages: string[] = Array.isArray(body.variant_images) ? body.variant_images.filter(Boolean) : [];
+
       if (best) {
         const it = itemMap[best.ad_id];
         try {
-          const imgRes: any = await base44.asServiceRole.integrations.Core.GenerateImage({
-            prompt: best.new_image_prompt,
-            existing_image_urls: [it.thumbnail],
-          });
-          const imgUrl = imgRes?.url;
-          if (imgUrl) {
-            const imgResp = await fetch(imgUrl);
-            const ab = await imgResp.arrayBuffer();
-            const bytes = new Uint8Array(ab);
-            const filename = 'aivariant.jpg';
+          const uploadB64 = async (dataUrl: string, filename: string): Promise<string | null> => {
+            const b64 = String(dataUrl).split(',').pop() || '';
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
             const boundary = 'b44opt' + Math.random().toString().slice(2);
             const head =
               `--${boundary}\r\n` +
@@ -181,36 +184,71 @@ Deno.serve(async (req) => {
               `Content-Type: image/jpeg\r\n\r\n`;
             const tail = `\r\n--${boundary}--\r\n`;
             const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${boundary}` });
-            const ir2 = await fetch(`${GRAPH}/${actId}/adimages`, {
+            const ir = await fetch(`${GRAPH}/${actId}/adimages`, {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
               body: blob,
             });
-            const idata2: any = await ir2.json();
-            const image_hash = idata2?.images?.[filename]?.hash;
-            if (image_hash && it.creative_id) {
-              const cr3 = await fetch(`${GRAPH}/${it.creative_id}?fields=object_story_spec,name`, { headers });
-              const cd3: any = await cr3.json();
-              const spec: any = cd3.object_story_spec;
-              if (spec) {
-                if (spec.link_data) spec.link_data.image_hash = image_hash;
-                const newCreative = { name: (it.name || 'Ad') + ' (AI variant)', object_story_spec: spec };
+            const d: any = await ir.json();
+            return d?.images?.[filename]?.hash || null;
+          };
+
+          // Collect image hashes for the new variant(s).
+          const hashes: string[] = [];
+          if (userImages.length) {
+            for (let i = 0; i < userImages.length; i++) {
+              const h = await uploadB64(userImages[i], `variant_${i + 1}.jpg`);
+              if (h) hashes.push(h);
+            }
+          } else if (best.new_image_prompt) {
+            const imgRes: any = await base44.asServiceRole.integrations.Core.GenerateImage({
+              prompt: best.new_image_prompt,
+              existing_image_urls: it.thumbnail ? [it.thumbnail] : undefined,
+            });
+            const imgUrl = imgRes?.url;
+            if (imgUrl) {
+              const imgResp = await fetch(imgUrl);
+              const ab = await imgResp.arrayBuffer();
+              const bytes = new Uint8Array(ab);
+              const b64 = btoa(String.fromCharCode(...Array.from(bytes)));
+              const h = await uploadB64(`data:image/jpeg;base64,${b64}`, 'aivariant.jpg');
+              if (h) hashes.push(h);
+            }
+          }
+
+          if (hashes.length && it.creative_id) {
+            const cr3 = await fetch(`${GRAPH}/${it.creative_id}?fields=object_story_spec,name`, { headers });
+            const cd3: any = await cr3.json();
+            const baseSpec: any = cd3.object_story_spec;
+            if (baseSpec) {
+              const variants: any[] = [];
+              for (let i = 0; i < hashes.length; i++) {
+                const spec = JSON.parse(JSON.stringify(baseSpec));
+                if (spec.link_data) {
+                  spec.link_data.image_hash = hashes[i];
+                  if (best.new_message) spec.link_data.message = best.new_message;
+                  if (best.new_headline) spec.link_data.name = best.new_headline;
+                }
+                const label = (it.name || 'Ad') + (hashes.length > 1 ? ` (variant ${i + 1})` : ' (variant)');
                 const cr4 = await fetch(`${GRAPH}/${actId}/adcreatives`, {
                   method: 'POST',
                   headers: { ...headers, 'Content-Type': 'application/json' },
-                  body: JSON.stringify(newCreative),
+                  body: JSON.stringify({ name: label, object_story_spec: spec }),
                 });
                 const cd4: any = await cr4.json();
                 if (cd4.id) {
                   const ar3 = await fetch(`${GRAPH}/${actId}/ads`, {
                     method: 'POST',
                     headers: { ...headers, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: (it.name || 'Ad') + ' (AI variant)', adset_id: it.adset_id, creative: { creative_id: cd4.id }, status: 'PAUSED' }),
+                    body: JSON.stringify({ name: label, adset_id: it.adset_id, creative: { creative_id: cd4.id }, status: 'PAUSED' }),
                   });
                   const adData: any = await ar3.json();
-                  generated = { from: it.ad_id, new_ad_id: adData.id, ok: !adData.error, error: adData.error?.message };
+                  variants.push({ new_ad_id: adData.id, ok: !adData.error, error: adData.error?.message });
+                } else {
+                  variants.push({ ok: false, error: cd4.error?.message || 'creative create failed' });
                 }
               }
+              generated = { from: it.ad_id, ok: variants.some((v) => v.ok), count: variants.length, variants };
             }
           }
         } catch (e) {
