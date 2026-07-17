@@ -12,7 +12,7 @@ export default function CreateAd() {
     (async () => {
       try {
         const res = await base44.functions.invoke('metaAds', { action: 'list_accounts' });
-        setAccounts(res.accounts || []);
+        setAccounts(res.data.accounts || []);
         const configs = await base44.entities.AppConfig.list();
         setConfig(configs[0] || null);
       } catch (e) {
