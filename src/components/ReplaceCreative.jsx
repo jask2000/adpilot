@@ -170,7 +170,7 @@ export default function ReplaceCreative({ account }) {
       setMessage('');
       fetchAds();
     } catch (e) {
-      setError(e.message);
+      setError(e?.response?.data?.error || e?.message || 'Request failed');
     } finally {
       setBusy(false);
     }
