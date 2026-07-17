@@ -357,14 +357,16 @@ Deno.serve(async (req) => {
       const { account_id, cap } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      // Meta's spend_cap is accepted in the account currency (dollars) and stored as cents,
+      // so we send the dollar value as-is (no ×100 conversion).
       const r = await fetch(`${GRAPH}/${actId}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spend_cap: Math.round(Number(cap) * 100) }),
+        body: JSON.stringify({ spend_cap: Math.round(Number(cap) * 100) / 100 }),
       });
       const data: any = await r.json();
       if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
-      return Response.json({ success: true, spend_cap: Math.round(Number(cap) * 100) });
+      return Response.json({ success: true });
     }
 
     if (action === 'list_used_image_hashes') {
