@@ -20,15 +20,15 @@ export default function Media() {
           actId = cfgs[0].selected_ad_account_id;
         } else {
           const res = await base44.functions.invoke('metaAds', { action: 'list_accounts' });
-          actId = res.accounts?.[0]?.account_id || res.accounts?.[0]?.id || '';
+          actId = res.data?.accounts?.[0]?.account_id || res.data?.accounts?.[0]?.id || '';
         }
         if (!actId) {
           setError('No ad account found.');
           setLoading(false);
           return;
         }
-        const res = await base44.functions.invoke('metaAds', { action: 'list_media', account_id: actId });
-        setMedia(res.media || []);
+        const res2 = await base44.functions.invoke('metaAds', { action: 'list_media', account_id: actId });
+        setMedia(res2.data?.media || []);
       } catch (e) {
         setError(e.message || 'Failed to load media');
       } finally {
