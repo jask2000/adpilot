@@ -16,6 +16,7 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import { Loader2, Sparkles, AlertCircle, Wand2, CheckCircle2, ImagePlus, X, Video } from 'lucide-react';
+import ReplaceCreative from '@/components/ReplaceCreative';
 
 const RATIOS = [
   { value: '1:1', label: '1:1 · Feed', w: 1, h: 1 },
@@ -263,6 +264,8 @@ export default function CreativeOptimizer() {
           </div>
         </CardContent>
       </Card>
+
+      <ReplaceCreative account={account} />
 
       {accLoading && <p className="text-muted-foreground text-sm">Loading…</p>}
       {error && (

@@ -664,6 +664,133 @@ Deno.serve(async (req) => {
       return Response.json({ videos: data.data || [] });
     }
 
+    if (action === 'replace_creative') {
+      const { account_id, ad_id, image_base64, image_filename, video_base64, video_filename, headline, message } = body;
+      if (!account_id || !ad_id) return Response.json({ error: 'account_id and ad_id required' }, { status: 400 });
+      if (!image_base64 && !video_base64) return Response.json({ error: 'image_base64 or video_base64 required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+
+      // 1. Current ad: status + creative id
+      const adRes = await fetch(`${GRAPH}/${ad_id}?fields=id,name,status,adset_id,creative{id}`, { headers });
+      const adData: any = await adRes.json();
+      if (adData.error) return Response.json({ error: adData.error.message }, { status: 502 });
+      const oldCreativeId = adData.creative?.id;
+      const wasActive = adData.status === 'ACTIVE';
+
+      // 2. Clone the existing creative's object_story_spec (page_id, link, CTA...)
+      let baseSpec: any = {};
+      if (oldCreativeId) {
+        const cr = await fetch(`${GRAPH}/${oldCreativeId}?fields=object_story_spec`, { headers });
+        const cd: any = await cr.json();
+        if (!cd.error) baseSpec = cd.object_story_spec || {};
+      }
+      let page_id = baseSpec.page_id;
+      if (!page_id) {
+        const pr = await fetch(`${GRAPH}/me/accounts?fields=id&limit=1`, { headers });
+        const pd: any = await pr.json();
+        page_id = pd.data?.[0]?.id;
+      }
+      if (!page_id) return Response.json({ error: 'No Facebook Page connected to your account.' }, { status: 400 });
+
+      // 3. Upload replacement image or video
+      let image_hash: string | null = null;
+      let video_id: string | null = null;
+      try {
+        if (image_base64) {
+          const b64 = String(image_base64).split(',').pop() || '';
+          const binary = atob(b64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const filename = image_filename || `replace_${Date.now()}.jpg`;
+          const boundary = 'b44rep' + Math.random().toString().slice(2);
+          const head =
+            `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="filename"\r\n\r\n${filename}\r\n` +
+            `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="${filename}"; filename="${filename}"\r\n` +
+            `Content-Type: image/jpeg\r\n\r\n`;
+          const tail = `\r\n--${boundary}--\r\n`;
+          const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${boundary}` });
+          const ir = await fetch(`${GRAPH}/${actId}/adimages`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+            body: blob,
+          });
+          const idata: any = await ir.json();
+          if (idata.error) return Response.json({ error: 'image: ' + idata.error.message }, { status: 502 });
+          image_hash = idata?.images?.[filename]?.hash || null;
+        } else {
+          const b64 = String(video_base64).split(',').pop() || '';
+          const binary = atob(b64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const filename = video_filename || `replace_${Date.now()}.mp4`;
+          const boundary = 'b44repv' + Math.random().toString().slice(2);
+          const head =
+            `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="source"; filename="${filename}"\r\n` +
+            `Content-Type: video/mp4\r\n\r\n`;
+          const tail = `\r\n--${boundary}--\r\n`;
+          const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${boundary}` });
+          const vr = await fetch(`${GRAPH}/${actId}/advideos`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+            body: blob,
+          });
+          const vdata: any = await vr.json();
+          if (vdata.error) return Response.json({ error: 'video: ' + vdata.error.message }, { status: 502 });
+          video_id = vdata.id || null;
+        }
+      } catch (e) {
+        return Response.json({ error: 'upload failed: ' + (e as Error).message }, { status: 502 });
+      }
+
+      // 4. Build the new creative spec (clone original, swap media + optional copy)
+      let newSpec: any;
+      if (image_hash) {
+        const linkData = baseSpec.link_data ? JSON.parse(JSON.stringify(baseSpec.link_data)) : {};
+        linkData.image_hash = image_hash;
+        if (message) linkData.message = message;
+        if (headline) linkData.name = headline;
+        newSpec = { page_id, link_data: linkData };
+      } else {
+        const videoData: any = { video_id };
+        if (message) videoData.message = message;
+        if (headline) videoData.title = headline;
+        newSpec = { page_id, video_data: videoData };
+      }
+
+      // 5. Create the replacement creative
+      const crRes = await fetch(`${GRAPH}/${actId}/adcreatives`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: (adData.name || 'Ad') + ' (replaced)', object_story_spec: newSpec }),
+      });
+      const crData: any = await crRes.json();
+      if (crData.error) return Response.json({ error: 'creative: ' + crData.error.message }, { status: 502 });
+
+      // 6. Point the existing ad at the new creative. Meta won't update a creative
+      //    on an ACTIVE ad, so pause first and resume afterward if it was active.
+      if (wasActive) {
+        await fetch(`${GRAPH}/${ad_id}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'PAUSED' }) });
+      }
+      const upRes = await fetch(`${GRAPH}/${ad_id}`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creative: { creative_id: crData.id } }),
+      });
+      const upData: any = await upRes.json();
+      if (upData.error) {
+        if (wasActive) await fetch(`${GRAPH}/${ad_id}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'ACTIVE' }) });
+        return Response.json({ error: 'ad update: ' + upData.error.message, new_creative_id: crData.id }, { status: 502 });
+      }
+      if (wasActive) {
+        await fetch(`${GRAPH}/${ad_id}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'ACTIVE' }) });
+      }
+
+      return Response.json({ success: true, ad_id, new_creative_id: crData.id, was_active: wasActive });
+    }
+
     return Response.json({ error: 'Unknown action' }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
