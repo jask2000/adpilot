@@ -62,8 +62,11 @@ Deno.serve(async (req) => {
       'analyze the visual and its metrics to score it 0-100 and recommend an action. ' +
       'Actions: "keep" (fine), "pause" (poor — meaningful spend with low CTR / high CPC), "boost" (top performer worth more budget). ' +
       'For strong performers, set generate_variant=true and provide a concrete new_image_prompt for a better A/B test variation. ' +
+      'CRITICAL for new_image_prompt: keep the HELLCRUST PIZZA branding fully intact (logo, brand colors, fonts, style). ' +
+      'Do NOT add any people, faces, models, avatars, or human figures — keep it simple: pizza, food, ingredients, text overlays, ' +
+      'and brand graphics only. Keep the same product-forward layout. ' +
       'When the user will supply their own images, also suggest improved ad copy: new_headline (short, punchy) and new_message (1-2 line body text) ' +
-      'that would outperform the original. Return analyses for every ad_id provided.\n\nAds:\n' +
+      'that would outperform the original, preserving Hellcrust tone of voice. Return analyses for every ad_id provided.\n\nAds:\n' +
       JSON.stringify(items.map((i: any) => ({ ad_id: i.ad_id, name: i.name, status: i.status, spend: i.spend, clicks: i.clicks, ctr: i.ctr, cpc: i.cpc })), null, 2);
 
     const schema = {
@@ -202,7 +205,9 @@ Deno.serve(async (req) => {
             }
           } else if (best.new_image_prompt) {
             const imgRes: any = await base44.asServiceRole.integrations.Core.GenerateImage({
-              prompt: best.new_image_prompt,
+              prompt: (best.new_image_prompt || '') +
+                '. Keep the HELLCRUST PIZZA branding intact (logo, brand colors, fonts). ' +
+                'No people, faces, models, avatars, or human figures. Simple product/food-forward design.',
               existing_image_urls: it.thumbnail ? [it.thumbnail] : undefined,
             });
             const imgUrl = imgRes?.url;
