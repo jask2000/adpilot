@@ -121,10 +121,19 @@ export default function Media() {
       ),
     );
     const failed = hashes.filter((_, i) => results[i].status === 'rejected');
+    const firstReason = results.find((r) => r.status === 'rejected')?.reason?.message
+      || results.find((r) => r.status === 'rejected')?.reason?.error
+      || '';
     setSelected(new Set(failed));
     setDelProgress(null);
     await loadMedia(accountId);
-    if (failed.length) setError(`${failed.length} image(s) could not be deleted.`);
+    if (failed.length) {
+      setError(
+        `${failed.length} image(s) could not be deleted. ${
+          firstReason && /used|creative/i.test(firstReason) ? firstReason : ''
+        }`.trim(),
+      );
+    }
     setBusy(false);
   };
 

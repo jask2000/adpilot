@@ -378,12 +378,24 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'delete_media') {
-      const { account_id, hash } = body;
-      if (!account_id || !hash) return Response.json({ error: 'account_id and hash required' }, { status: 400 });
+      const { account_id, hash, image_id } = body;
+      if (!account_id || (!hash && !image_id)) return Response.json({ error: 'account_id and hash/image_id required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
-      const r = await fetch(`${GRAPH}/${actId}/adimages?hash=${encodeURIComponent(hash)}`, { method: 'DELETE', headers });
+      // Meta's DELETE expects params in the JSON body (query string often yields "Invalid parameter").
+      const r = await fetch(`${GRAPH}/${actId}/adimages`, {
+        method: 'DELETE',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(hash ? { hash } : { image_id }),
+      });
       const data: any = await r.json();
-      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      if (data.error) {
+        const msg = data.error.message || 'Delete failed';
+        // Meta blocks deleting images that are used by an ad creative; surface a clear reason.
+        const friendly = msg.toLowerCase().includes('invalid parameter')
+          ? 'Meta could not delete this image — it is likely still used by an ad creative. Remove or repoint the ad first, then delete the image.'
+          : msg;
+        return Response.json({ error: friendly, raw: msg }, { status: 502 });
+      }
       return Response.json({ success: true });
     }
 
