@@ -1,11 +1,12 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Bot, Megaphone, PlusCircle, Users, Wand2, Images } from 'lucide-react';
+import { LayoutDashboard, Bot, Megaphone, PlusCircle, Users, Wand2, Images, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/create-ad', label: 'Create Ad', icon: PlusCircle },
+  { to: '/quick-sales', label: 'Quick Sales', icon: Sparkles },
   { to: '/media', label: 'Media', icon: Images },
   { to: '/audiences', label: 'Audiences', icon: Users },
   { to: '/optimizer', label: 'Optimizer', icon: Wand2 },

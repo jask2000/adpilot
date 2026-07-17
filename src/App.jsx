@@ -14,6 +14,7 @@ import CreateAd from '@/pages/CreateAd';
 import Audiences from '@/pages/Audiences';
 import CreativeOptimizer from '@/pages/CreativeOptimizer';
 import Media from '@/pages/Media';
+import QuickSales from '@/pages/QuickSales';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -49,6 +50,7 @@ const AuthenticatedApp = () => {
         <Route path="/audiences" element={<Audiences />} />
         <Route path="/optimizer" element={<CreativeOptimizer />} />
         <Route path="/media" element={<Media />} />
+        <Route path="/quick-sales" element={<QuickSales />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

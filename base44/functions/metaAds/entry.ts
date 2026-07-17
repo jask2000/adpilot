@@ -124,6 +124,17 @@ Deno.serve(async (req) => {
       };
       const optimization_goal = optGoalMap[opt] || 'LINK_CLICKS';
 
+      // For Sales campaigns, auto-attach the account's conversion pixel so the
+      // ad set can optimize for purchases without manual setup.
+      let promoted_object: any = null;
+      if (opt === 'OUTCOME_SALES') {
+        const pxr = await fetch(`${GRAPH}/${actId}/adspixels?fields=id,name&limit=10`, { headers });
+        const pxd: any = await pxr.json();
+        if (!pxd.error && pxd.data && pxd.data.length) {
+          promoted_object = { pixel_id: pxd.data[0].id, custom_event_type: 'PURCHASE' };
+        }
+      }
+
       // 1. Campaign
       const cr = await fetch(`${GRAPH}/${actId}/campaigns`, {
         method: 'POST',
@@ -156,6 +167,7 @@ Deno.serve(async (req) => {
           billing_event: 'IMPRESSIONS',
           optimization_goal,
           targeting,
+          ...(promoted_object ? { promoted_object } : {}),
           status: 'PAUSED',
         }),
       });
@@ -163,9 +175,9 @@ Deno.serve(async (req) => {
       if (adset.error) return Response.json({ error: 'adset: ' + adset.error.message, campaign_id }, { status: 502 });
       const adset_id = adset.id;
 
-      // 3. Upload image
-      let image_hash: string | null = null;
-      if (image_base64) {
+      // 3. Use existing image or upload a new one
+      let image_hash: string | null = body.image_hash || null;
+      if (!image_hash && image_base64) {
         try {
           const b64 = String(image_base64).split(',').pop() || '';
           const binary = atob(b64);
