@@ -1,0 +1,48 @@
+{
+  "name": "Creative Optimizer Runner",
+  "description": "Daily AI creative optimization: scores ad creatives, pauses underperformers, and boosts winners on the selected Meta ad account.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 9 * * *",
+      "one_time_date": null,
+      "timezone": "America/Vancouver",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "creative_optimizer_runner",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "optimize": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "optimizeCreatives",
+            "args": {
+              "auto_tune": true,
+              "generate": false
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Optimize creatives",
+            "description": "Score, pause losers, boost winners"
+          }
+        }
+      }
+    ]
+  }
+}

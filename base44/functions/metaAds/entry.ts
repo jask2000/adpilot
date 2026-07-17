@@ -145,7 +145,9 @@ Deno.serve(async (req) => {
           daily_budget: String(budgetCents),
           billing_event: 'IMPRESSIONS',
           optimization_goal,
-          targeting: { geo_locations: { countries: ['US', 'CA'] } },
+          targeting: body.audience_id
+            ? { custom_audiences: [{ id: body.audience_id }] }
+            : { geo_locations: { countries: ['US', 'CA'] } },
           status: 'PAUSED',
         }),
       });
@@ -222,6 +224,67 @@ Deno.serve(async (req) => {
       if (adData.error) return Response.json({ error: 'ad: ' + adData.error.message, campaign_id, adset_id, creative_id }, { status: 502 });
 
       return Response.json({ success: true, campaign_id, adset_id, creative_id, ad_id: adData.id });
+    }
+
+    if (action === 'list_audiences') {
+      const { account_id } = body;
+      if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const r = await fetch(`${GRAPH}/${actId}/customaudiences?fields=id,name,subtype,approximate_count,description,status,time_updated&limit=200`, { headers });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ audiences: data.data || [] });
+    }
+
+    if (action === 'create_audience') {
+      const { account_id, name, description } = body;
+      if (!account_id || !name) return Response.json({ error: 'account_id and name required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const r = await fetch(`${GRAPH}/${actId}/customaudiences`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, subtype: 'CUSTOM_AUDIENCE', description: description || '', customer_file_source: 'USER_PROVIDED_ONLY' }),
+      });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ success: true, audience_id: data.id });
+    }
+
+    if (action === 'create_lookalike') {
+      const { account_id, origin_audience_id, name, country, ratio } = body;
+      if (!account_id || !origin_audience_id) return Response.json({ error: 'account_id and origin_audience_id required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const r = await fetch(`${GRAPH}/${actId}/customaudiences`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name || 'Lookalike',
+          subtype: 'LOOKALIKE',
+          origin_audience_id,
+          lookalike_spec: { country: country || 'CA', ratio: ratio || 0.01, start: ratio || 0.01, end: ratio || 0.01 },
+        }),
+      });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ success: true, audience_id: data.id });
+    }
+
+    if (action === 'list_ads') {
+      const { account_id } = body;
+      if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const ar = await fetch(`${GRAPH}/${actId}/ads?fields=id,name,status,adset_id,creative{id,thumbnail_url,name}&limit=200`, { headers });
+      const adata: any = await ar.json();
+      if (adata.error) return Response.json({ error: adata.error.message }, { status: 502 });
+      const ads = adata.data || [];
+      const insightsMap: Record<string, any> = {};
+      try {
+        const ir = await fetch(`${GRAPH}/${actId}/insights?fields=ad_id,spend,clicks,impressions,reach,cpc,ctr&level=ad&limit=200`, { headers });
+        const idata: any = await ir.json();
+        for (const row of (idata.data || [])) insightsMap[row.ad_id] = row;
+      } catch (_e) { /* insights optional */ }
+      const result = ads.map((a: any) => ({ ...a, insights: insightsMap[a.id] || null, thumbnail: a.creative?.thumbnail_url || null }));
+      return Response.json({ ads: result });
     }
 
     return Response.json({ error: 'Unknown action' }, { status: 400 });

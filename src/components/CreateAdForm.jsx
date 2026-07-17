@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,11 +43,28 @@ export default function CreateAdForm({ account }) {
     cta: 'LEARN_MORE',
   });
   const [image, setImage] = useState(null);
+  const [audiences, setAudiences] = useState([]);
+  const [audienceId, setAudienceId] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    if (!account) return;
+    (async () => {
+      try {
+        const res = await base44.functions.invoke('metaAds', {
+          action: 'list_audiences',
+          account_id: account.account_id || account.id,
+        });
+        setAudiences(res.data.audiences || []);
+      } catch (_e) {
+        /* audiences optional */
+      }
+    })();
+  }, [account]);
 
   const onFile = (e) => {
     const f = e.target.files?.[0];
@@ -80,6 +97,7 @@ export default function CreateAdForm({ account }) {
         message: form.message,
         link: form.link,
         call_to_action_type: form.cta,
+        audience_id: audienceId || null,
         image_base64: image?.base64 || null,
         image_filename: image?.name || null,
       });
@@ -188,6 +206,22 @@ export default function CreateAdForm({ account }) {
               onChange={(e) => set('link', e.target.value)}
               placeholder="https://example.com"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Target audience (optional)</Label>
+            <Select value={audienceId} onValueChange={setAudienceId}>
+              <SelectTrigger>
+                <SelectValue placeholder="None — default geo targeting" />
+              </SelectTrigger>
+              <SelectContent>
+                {audiences.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name} ({a.subtype})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

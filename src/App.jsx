@@ -11,6 +11,8 @@ import Layout from '@/components/Layout';
 import Home from '@/pages/Home';
 import AutoRules from '@/pages/AutoRules';
 import CreateAd from '@/pages/CreateAd';
+import Audiences from '@/pages/Audiences';
+import CreativeOptimizer from '@/pages/CreativeOptimizer';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -43,6 +45,8 @@ const AuthenticatedApp = () => {
         <Route path="/" element={<Home />} />
         <Route path="/auto-rules" element={<AutoRules />} />
         <Route path="/create-ad" element={<CreateAd />} />
+        <Route path="/audiences" element={<Audiences />} />
+        <Route path="/optimizer" element={<CreativeOptimizer />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
