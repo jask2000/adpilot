@@ -473,19 +473,25 @@ Deno.serve(async (req) => {
       return map;
     };
 
-    const collectActiveCreativeIds = async (actId: string) => {
-      const set = new Set<string>();
-      let url: string | null = `${GRAPH}/${actId}/ads?fields=id,effective_status,creative{id}&limit=200&effective_status=["ACTIVE"]`;
+    // Map creative_id -> [{ id, effective_status }] for every ad in the account.
+    const collectAdMap = async (actId: string) => {
+      const map: Record<string, Array<{ id: string; effective_status: string }>> = {};
+      let url: string | null = `${GRAPH}/${actId}/ads?fields=id,effective_status,creative{id}&limit=200`;
       let guard = 0;
       while (url && guard < 10) {
         guard++;
         const r = await fetch(url, { headers });
         const data: any = await r.json();
         if (data.error) throw new Error(data.error.message);
-        for (const ad of (data.data || [])) if (ad.creative?.id) set.add(ad.creative.id);
+        for (const ad of (data.data || [])) {
+          if (ad.creative?.id) {
+            if (!map[ad.creative.id]) map[ad.creative.id] = [];
+            map[ad.creative.id].push({ id: ad.id, effective_status: ad.effective_status || 'UNKNOWN' });
+          }
+        }
         url = data.paging && data.paging.next ? data.paging.next : null;
       }
-      return set;
+      return map;
     };
 
     const deleteImageByHash = async (actId: string, hash: string) => {
@@ -503,35 +509,71 @@ Deno.serve(async (req) => {
       if (!targetHashes.length) return Response.json({ error: 'hash or hashes required' }, { status: 400 });
 
       try {
-        const [creativeMap, activeIds] = await Promise.all([collectCreativeMap(actId), collectActiveCreativeIds(actId)]);
+        const [creativeMap, adMap] = await Promise.all([collectCreativeMap(actId), collectAdMap(actId)]);
 
+        // For each target image: split its creatives into "keep" (used by an active ad) and
+        // "remove" (everything else). To remove a creative, Meta first needs the ads that use
+        // it deleted — so we delete any non-active ads attached to those creatives first.
         const perHash = targetHashes.map((h) => {
           const creatives = creativeMap[h] || [];
-          const blocked = creatives.filter((c) => activeIds.has(c));
-          return { hash: h, creatives: creatives.filter((c) => !activeIds.has(c)), blocked };
+          const keep: string[] = [];
+          const remove: string[] = [];
+          const adsToDelete = new Set<string>();
+          for (const cid of creatives) {
+            const ads = adMap[cid] || [];
+            if (ads.some((a) => a.effective_status === 'ACTIVE')) {
+              keep.push(cid);
+            } else {
+              remove.push(cid);
+              for (const a of ads) adsToDelete.add(a.id);
+            }
+          }
+          return { hash: h, keep, remove, adsToDelete };
         });
 
-        // 1. Delete every blocking creative (non-active) across all requested hashes, in parallel.
+        // 1. Delete every non-active ad that blocks a creative we want to remove (parallel).
+        const adsToDelete = new Set<string>();
+        for (const p of perHash) for (const id of p.adsToDelete) adsToDelete.add(id);
+        await Promise.all(Array.from(adsToDelete).map(async (aid) => {
+          try { await fetch(`${GRAPH}/${aid}`, { method: 'DELETE', headers }); } catch (_e) {}
+        }));
+
+        // 2. Now delete the creatives themselves (parallel). Active-ad creatives are left untouched.
         const creativesToDelete = new Set<string>();
-        for (const p of perHash) for (const c of p.creatives) creativesToDelete.add(c);
+        for (const p of perHash) for (const c of p.remove) creativesToDelete.add(c);
         await Promise.all(Array.from(creativesToDelete).map(async (cid) => {
           try { await fetch(`${GRAPH}/${cid}`, { method: 'DELETE', headers }); } catch (_e) {}
         }));
 
-        // 2. If any creatives were removed, give Meta a moment to propagate before images unlock.
+        // 3. Give Meta a moment to propagate before images unlock.
         if (creativesToDelete.size) await new Promise((res) => setTimeout(res, 2500));
 
-        // 3. Delete each image, retrying once after a short delay if Meta still thinks it's locked.
+        // 4. Delete each image, retrying if Meta still thinks it's locked.
         const results = await Promise.all(perHash.map(async (p) => {
-          if (p.blocked.length) return { hash: p.hash, status: 'blocked', reason: 'Used by an active ad — cannot delete.', creatives_removed: 0 };
+          if (p.keep.length) return { hash: p.hash, status: 'blocked', reason: 'Used by an active ad — cannot delete.', creatives_removed: p.remove.length };
           let lastErr = '';
+          let deleted = false;
           for (let attempt = 0; attempt < 3; attempt++) {
             if (attempt > 0) await new Promise((res) => setTimeout(res, 2000));
-            try { await deleteImageByHash(actId, p.hash); return { hash: p.hash, status: 'deleted', creatives_removed: p.creatives.length }; }
-            catch (e) { lastErr = (e as Error).message; if (p.creatives.length === 0) break; }
+            try { await deleteImageByHash(actId, p.hash); deleted = true; break; }
+            catch (e) { lastErr = (e as Error).message; if (p.remove.length === 0) break; }
           }
-          return { hash: p.hash, status: 'error', reason: lastErr, creatives_removed: p.creatives.length };
+          if (deleted) return { hash: p.hash, status: 'deleted', creatives_removed: p.remove.length };
+          return { hash: p.hash, status: 'error', reason: lastErr, creatives_removed: p.remove.length };
         }));
+
+        // 5. For any image that failed despite removing creatives, re-scan once to report which
+        //    creatives Meta refused to release (so the UI can say why, not just "Invalid parameter").
+        const failedHashes = results.filter((r) => r.status === 'error' && perHash.find((p) => p.hash === r.hash)?.remove.length > 0).map((r) => r.hash);
+        if (failedHashes.length) {
+          const remaining = await collectCreativeMap(actId);
+          for (const r of results) {
+            if (r.status === 'error' && failedHashes.includes(r.hash)) {
+              const count = (remaining[r.hash] || []).length;
+              if (count > 0) r.reason = `Meta won't release this image — ${count} creative(s) referencing it can't be deleted (previously used in ads).`;
+            }
+          }
+        }
 
         const failed = results.filter((r) => r.status !== 'deleted');
         return Response.json({

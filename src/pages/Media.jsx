@@ -111,7 +111,7 @@ export default function Media() {
   };
 
   const handleDelete = async (m) => {
-    if (!confirm(`Delete "${m.name || m.hash.slice(0, 8)}"? Any paused/archived ad creatives using this image will also be removed so Meta allows the deletion. Active ads are left untouched.`)) return;
+    if (!confirm(`Delete "${m.name || m.hash.slice(0, 8)}"? Any paused or archived ads and creatives using this image will also be deleted so Meta allows the deletion. Ads that are currently active are left untouched.`)) return;
     setBusy(true);
     setError(null);
     try {
@@ -133,7 +133,7 @@ export default function Media() {
   const handleDeleteSelected = async () => {
     const count = selected.size;
     if (!count) return;
-    if (!confirm(`Delete ${count} selected image${count > 1 ? 's' : ''}? Any paused/archived ad creatives using these images will also be removed so Meta allows the deletion. Active ads are left untouched.`)) return;
+    if (!confirm(`Delete ${count} selected image${count > 1 ? 's' : ''}? Any paused or archived ads and creatives using these images will also be deleted so Meta allows the deletion. Ads that are currently active are left untouched.`)) return;
     setBusy(true);
     setError(null);
     setDelProgress({ done: 0, total: count });
