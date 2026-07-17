@@ -95,15 +95,31 @@ export default function Media() {
     }
   };
 
+  const runDelete = async (hashes) => {
+    const res = await base44.functions.invoke('metaAds', { action: 'delete_media', account_id: accountId, hashes });
+    const data = res.data || {};
+    const failedHashes = (data.results || []).filter((r) => r.status !== 'deleted').map((r) => r.hash);
+    const blockedCount = data.blocked || 0;
+    const errorCount = data.errors || 0;
+    let msg = '';
+    if (blockedCount) msg += `${blockedCount} image(s) are used by an active ad and were skipped. `;
+    if (errorCount) {
+      const firstErr = (data.results || []).find((r) => r.status === 'error');
+      msg += `${errorCount} image(s) failed${firstErr ? `: ${firstErr.reason}` : ''}.`;
+    }
+    return { failedHashes, msg: msg.trim() };
+  };
+
   const handleDelete = async (m) => {
-    if (!confirm(`Delete "${m.name || m.hash.slice(0, 8)}"? This removes it from your ad account.`)) return;
+    if (!confirm(`Delete "${m.name || m.hash.slice(0, 8)}"? Any paused/archived ad creatives using this image will also be removed so Meta allows the deletion. Active ads are left untouched.`)) return;
     setBusy(true);
     setError(null);
     try {
-      await base44.functions.invoke('metaAds', { action: 'delete_media', account_id: accountId, hash: m.hash });
+      const { failedHashes, msg } = await runDelete([m.hash]);
+      if (msg) setError(msg);
       setSelected((prev) => {
         const next = new Set(prev);
-        next.delete(m.hash);
+        if (!failedHashes.includes(m.hash)) next.delete(m.hash);
         return next;
       });
       await loadMedia(accountId);
@@ -117,33 +133,23 @@ export default function Media() {
   const handleDeleteSelected = async () => {
     const count = selected.size;
     if (!count) return;
-    if (!confirm(`Delete ${count} selected image${count > 1 ? 's' : ''} from your ad account?`)) return;
+    if (!confirm(`Delete ${count} selected image${count > 1 ? 's' : ''}? Any paused/archived ad creatives using these images will also be removed so Meta allows the deletion. Active ads are left untouched.`)) return;
     setBusy(true);
     setError(null);
     setDelProgress({ done: 0, total: count });
     const hashes = Array.from(selected);
-    let done = 0;
-    const results = await Promise.allSettled(
-      hashes.map((hash) =>
-        base44.functions.invoke('metaAds', { action: 'delete_media', account_id: accountId, hash })
-          .finally(() => setDelProgress({ done: ++done, total: count })),
-      ),
-    );
-    const failed = hashes.filter((_, i) => results[i].status === 'rejected');
-    const firstReason = results.find((r) => r.status === 'rejected')?.reason?.message
-      || results.find((r) => r.status === 'rejected')?.reason?.error
-      || '';
-    setSelected(new Set(failed));
-    setDelProgress(null);
-    await loadMedia(accountId);
-    if (failed.length) {
-      setError(
-        `${failed.length} image(s) could not be deleted. ${
-          firstReason && /used|creative/i.test(firstReason) ? firstReason : ''
-        }`.trim(),
-      );
+    try {
+      setDelProgress({ done: 1, total: count });
+      const { failedHashes, msg } = await runDelete(hashes);
+      setSelected(new Set(failedHashes));
+      if (msg) setError(msg);
+      await loadMedia(accountId);
+    } catch (e) {
+      setError(e.message || 'Delete failed');
+    } finally {
+      setDelProgress(null);
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   return (

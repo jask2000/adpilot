@@ -400,6 +400,44 @@ Deno.serve(async (req) => {
       return Response.json({ hashes: Array.from(hashes), active_ads: creativeIds.size });
     }
 
+    if (action === 'list_creative_hashes') {
+      const { account_id } = body;
+      if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      // Map image_hash -> list of creative ids that reference it (across ALL creatives, any ad status).
+      const map: Record<string, string[]> = {};
+      let url: string | null = `${GRAPH}/${actId}/adcreatives?fields=id,object_story_spec&limit=200`;
+      let guard = 0;
+      while (url && guard < 10) {
+        guard++;
+        const r = await fetch(url, { headers });
+        const data: any = await r.json();
+        if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+        for (const c of (data.data || [])) {
+          const json = JSON.stringify(c.object_story_spec || {});
+          const matches = json.match(/"image_hash":"([^"]+)"/g) || [];
+          for (const mm of matches) {
+            const h = mm.match(/"image_hash":"([^"]+)"/)![1];
+            if (!map[h]) map[h] = [];
+            if (!map[h].includes(c.id)) map[h].push(c.id);
+          }
+        }
+        url = data.paging && data.paging.next ? data.paging.next : null;
+      }
+      const target = body.hash;
+      if (target) return Response.json({ hash: target, creatives: map[target] || [], referenced: !!(map[target] && map[target].length) });
+      return Response.json({ map, count: Object.keys(map).length });
+    }
+
+    if (action === 'delete_creative') {
+      const { creative_id } = body;
+      if (!creative_id) return Response.json({ error: 'creative_id required' }, { status: 400 });
+      const r = await fetch(`${GRAPH}/${creative_id}`, { method: 'DELETE', headers });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ success: true });
+    }
+
     if (action === 'list_media') {
       const { account_id } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
@@ -410,26 +448,102 @@ Deno.serve(async (req) => {
       return Response.json({ media: data.data || [] });
     }
 
-    if (action === 'delete_media') {
-      const { account_id, hash, image_id } = body;
-      if (!account_id || (!hash && !image_id)) return Response.json({ error: 'account_id and hash/image_id required' }, { status: 400 });
-      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
-      // Meta's DELETE expects params in the JSON body (query string often yields "Invalid parameter").
-      const r = await fetch(`${GRAPH}/${actId}/adimages`, {
-        method: 'DELETE',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify(hash ? { hash } : { image_id }),
-      });
-      const data: any = await r.json();
-      if (data.error) {
-        const msg = data.error.message || 'Delete failed';
-        // Meta blocks deleting images that are used by an ad creative; surface a clear reason.
-        const friendly = msg.toLowerCase().includes('invalid parameter')
-          ? 'Meta could not delete this image — it is likely still used by an ad creative. Remove or repoint the ad first, then delete the image.'
-          : msg;
-        return Response.json({ error: friendly, raw: msg }, { status: 502 });
+    // -- helpers shared by delete actions --
+    const collectCreativeMap = async (actId: string) => {
+      // Map image_hash -> creative ids referencing it (ALL creatives, any ad status).
+      const map: Record<string, string[]> = {};
+      let url: string | null = `${GRAPH}/${actId}/adcreatives?fields=id,object_story_spec&limit=200`;
+      let guard = 0;
+      while (url && guard < 10) {
+        guard++;
+        const r = await fetch(url, { headers });
+        const data: any = await r.json();
+        if (data.error) throw new Error(data.error.message);
+        for (const c of (data.data || [])) {
+          const json = JSON.stringify(c.object_story_spec || {});
+          const matches = json.match(/"image_hash":"([^"]+)"/g) || [];
+          for (const mm of matches) {
+            const h = mm.match(/"image_hash":"([^"]+)"/)![1];
+            if (!map[h]) map[h] = [];
+            if (!map[h].includes(c.id)) map[h].push(c.id);
+          }
+        }
+        url = data.paging && data.paging.next ? data.paging.next : null;
       }
-      return Response.json({ success: true });
+      return map;
+    };
+
+    const collectActiveCreativeIds = async (actId: string) => {
+      const set = new Set<string>();
+      let url: string | null = `${GRAPH}/${actId}/ads?fields=id,effective_status,creative{id}&limit=200&effective_status=["ACTIVE"]`;
+      let guard = 0;
+      while (url && guard < 10) {
+        guard++;
+        const r = await fetch(url, { headers });
+        const data: any = await r.json();
+        if (data.error) throw new Error(data.error.message);
+        for (const ad of (data.data || [])) if (ad.creative?.id) set.add(ad.creative.id);
+        url = data.paging && data.paging.next ? data.paging.next : null;
+      }
+      return set;
+    };
+
+    const deleteImageByHash = async (actId: string, hash: string) => {
+      const r = await fetch(`${GRAPH}/${actId}/adimages?hash=${encodeURIComponent(hash)}`, { method: 'DELETE', headers });
+      const data: any = await r.json();
+      if (data.error) throw new Error(data.error.message || 'Delete failed');
+      return true;
+    };
+
+    if (action === 'delete_media') {
+      const { account_id, hashes, hash } = body;
+      if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const targetHashes: string[] = Array.isArray(hashes) ? hashes : (hash ? [hash] : []);
+      if (!targetHashes.length) return Response.json({ error: 'hash or hashes required' }, { status: 400 });
+
+      try {
+        const [creativeMap, activeIds] = await Promise.all([collectCreativeMap(actId), collectActiveCreativeIds(actId)]);
+
+        const perHash = targetHashes.map((h) => {
+          const creatives = creativeMap[h] || [];
+          const blocked = creatives.filter((c) => activeIds.has(c));
+          return { hash: h, creatives: creatives.filter((c) => !activeIds.has(c)), blocked };
+        });
+
+        // 1. Delete every blocking creative (non-active) across all requested hashes, in parallel.
+        const creativesToDelete = new Set<string>();
+        for (const p of perHash) for (const c of p.creatives) creativesToDelete.add(c);
+        await Promise.all(Array.from(creativesToDelete).map(async (cid) => {
+          try { await fetch(`${GRAPH}/${cid}`, { method: 'DELETE', headers }); } catch (_e) {}
+        }));
+
+        // 2. If any creatives were removed, give Meta a moment to propagate before images unlock.
+        if (creativesToDelete.size) await new Promise((res) => setTimeout(res, 2500));
+
+        // 3. Delete each image, retrying once after a short delay if Meta still thinks it's locked.
+        const results = await Promise.all(perHash.map(async (p) => {
+          if (p.blocked.length) return { hash: p.hash, status: 'blocked', reason: 'Used by an active ad — cannot delete.', creatives_removed: 0 };
+          let lastErr = '';
+          for (let attempt = 0; attempt < 3; attempt++) {
+            if (attempt > 0) await new Promise((res) => setTimeout(res, 2000));
+            try { await deleteImageByHash(actId, p.hash); return { hash: p.hash, status: 'deleted', creatives_removed: p.creatives.length }; }
+            catch (e) { lastErr = (e as Error).message; if (p.creatives.length === 0) break; }
+          }
+          return { hash: p.hash, status: 'error', reason: lastErr, creatives_removed: p.creatives.length };
+        }));
+
+        const failed = results.filter((r) => r.status !== 'deleted');
+        return Response.json({
+          success: failed.length === 0,
+          results,
+          deleted: results.filter((r) => r.status === 'deleted').length,
+          blocked: results.filter((r) => r.status === 'blocked').length,
+          errors: results.filter((r) => r.status === 'error').length,
+        }, { status: failed.length === 0 ? 200 : 502 });
+      } catch (e) {
+        return Response.json({ error: (e as Error).message }, { status: 502 });
+      }
     }
 
     if (action === 'upload_media') {
