@@ -1,0 +1,12 @@
+{
+  "name": "AppConfig",
+  "type": "object",
+  "properties": {
+    "selected_ad_account_id": {
+      "type": "string"
+    },
+    "selected_ad_account_name": {
+      "type": "string"
+    }
+  }
+}

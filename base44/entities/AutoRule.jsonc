@@ -1,0 +1,59 @@
+{
+  "name": "AutoRule",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "metric": {
+      "type": "string",
+      "enum": [
+        "spend",
+        "clicks",
+        "impressions",
+        "reach",
+        "cpc",
+        "ctr"
+      ]
+    },
+    "condition": {
+      "type": "string",
+      "enum": [
+        "greater_than",
+        "less_than"
+      ]
+    },
+    "threshold": {
+      "type": "number"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "pause_campaign",
+        "set_budget"
+      ]
+    },
+    "budget_value": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "paused"
+      ],
+      "default": "active"
+    },
+    "last_run_date": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "name",
+    "metric",
+    "condition",
+    "threshold",
+    "action"
+  ]
+}
