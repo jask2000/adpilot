@@ -230,10 +230,16 @@ Deno.serve(async (req) => {
       const { account_id } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
-      const r = await fetch(`${GRAPH}/${actId}/customaudiences?fields=id,name,subtype,approximate_count,description,status,time_updated&limit=200`, { headers });
-      const data: any = await r.json();
-      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
-      return Response.json({ audiences: data.data || [] });
+      const [cr, sr] = await Promise.all([
+        fetch(`${GRAPH}/${actId}/customaudiences?fields=id,name,subtype,approximate_count,description,status,time_updated&limit=200`, { headers }),
+        fetch(`${GRAPH}/${actId}/savedaudiences?fields=id,name,approximate_count,description,status,time_updated&limit=200`, { headers }),
+      ]);
+      const cdata: any = await cr.json();
+      if (cdata.error) return Response.json({ error: cdata.error.message }, { status: 502 });
+      const sdata: any = await sr.json().catch(() => ({}));
+      const custom = (cdata.data || []).map((a: any) => ({ ...a, kind: 'custom' }));
+      const saved = ((sdata && sdata.data) || []).map((a: any) => ({ ...a, subtype: 'SAVED', kind: 'saved' }));
+      return Response.json({ audiences: [...custom, ...saved] });
     }
 
     if (action === 'create_audience') {

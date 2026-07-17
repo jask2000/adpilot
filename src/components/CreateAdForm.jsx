@@ -59,7 +59,7 @@ export default function CreateAdForm({ account }) {
           action: 'list_audiences',
           account_id: account.account_id || account.id,
         });
-        setAudiences(res.data.audiences || []);
+        setAudiences((res.data.audiences || []).filter((a) => a.kind !== 'saved'));
       } catch (_e) {
         /* audiences optional */
       }
