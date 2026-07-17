@@ -284,17 +284,35 @@ export default function CreativeOptimizer() {
 
           {result.generated && (
             <Card>
-              <CardContent className="py-4 flex items-start gap-2 text-sm">
-                {result.generated.ok ? (
-                  <CheckCircle2 className="h-4 w-4 mt-0.5 text-emerald-600 shrink-0" />
-                ) : (
-                  <AlertCircle className="h-4 w-4 mt-0.5 text-destructive shrink-0" />
-                )}
-                <div>
-                  {result.generated.ok
-                    ? `${result.generated.count || 1} new paused variant(s) created from the best performer.`
-                    : `Variant generation failed: ${result.generated.error}`}
+              <CardContent className="py-4 space-y-3">
+                <div className="flex items-start gap-2 text-sm">
+                  {result.generated.ok ? (
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 mt-0.5 text-destructive shrink-0" />
+                  )}
+                  <div>
+                    {result.generated.ok
+                      ? `${result.generated.count || 1} new paused variant(s) created.`
+                      : `Variant generation failed: ${result.generated.error}`}
+                  </div>
                 </div>
+                {result.generated.image_plan && result.generated.image_plan.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">AI image matching:</p>
+                    {result.generated.image_plan.map((p, i) => (
+                      <div key={i} className="flex gap-2 text-xs border rounded-md p-2 bg-muted/40">
+                        <Badge variant="outline" className="shrink-0">img {i + 1}</Badge>
+                        <div className="space-y-0.5">
+                          <div className="font-medium">→ {thumbMap[p.ad_id] ? 'ad' : 'ad'} {p.ad_id}</div>
+                          {p.headline && <div className="text-muted-foreground">Headline: “{p.headline}”</div>}
+                          {p.message && <div className="text-muted-foreground">Message: “{p.message}”</div>}
+                          {p.reason && <div className="text-muted-foreground italic">{p.reason}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

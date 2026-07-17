@@ -232,40 +232,106 @@ Deno.serve(async (req) => {
             }
           }
 
-          if (hashes.length && it.creative_id) {
-            const cr3 = await fetch(`${GRAPH}/${it.creative_id}?fields=object_story_spec,name`, { headers });
-            const cd3: any = await cr3.json();
-            const baseSpec: any = cd3.object_story_spec;
-            if (baseSpec) {
-              const variants: any[] = [];
-              for (let i = 0; i < hashes.length; i++) {
-                const spec = JSON.parse(JSON.stringify(baseSpec));
-                if (spec.link_data) {
-                  spec.link_data.image_hash = hashes[i];
-                  if (best.new_message) spec.link_data.message = best.new_message;
-                  if (best.new_headline) spec.link_data.name = best.new_headline;
-                }
-                const label = (it.name || 'Ad') + (hashes.length > 1 ? ` (variant ${i + 1})` : ' (variant)');
-                const cr4 = await fetch(`${GRAPH}/${actId}/adcreatives`, {
-                  method: 'POST',
-                  headers: { ...headers, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name: label, object_story_spec: spec }),
-                });
-                const cd4: any = await cr4.json();
-                if (cd4.id) {
-                  const ar3 = await fetch(`${GRAPH}/${actId}/ads`, {
-                    method: 'POST',
-                    headers: { ...headers, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: label, adset_id: it.adset_id, creative: { creative_id: cd4.id }, status: 'PAUSED' }),
-                  });
-                  const adData: any = await ar3.json();
-                  variants.push({ new_ad_id: adData.id, ok: !adData.error, error: adData.error?.message });
-                } else {
-                  variants.push({ ok: false, error: cd4.error?.message || 'creative create failed' });
+          // When the user supplied images, ask the AI to inspect each image's
+          // content and match it to the ad it should be cloned from — with a
+          // tailored headline/message for that specific image (instead of
+          // applying one generic copy to every image).
+          let imagePlan: any[] = [];
+          if (userImages.length && hashes.length) {
+            try {
+              const planPrompt =
+                'You are a Meta Ads creative strategist. The user uploaded ' +
+                hashes.length + ' image(s) to use as new ad variants. For EACH image, ' +
+                'analyze its content (subject, food, layout, text overlays, branding, colors) ' +
+                'and decide which existing ad it should be cloned from, plus a tailored ' +
+                'headline (short, punchy) and message (1-2 line body) that fit THAT image ' +
+                'specifically. Preserve HELLCRUST PIZZA tone of voice — appetite-appeal, ' +
+                'no claims that aren\'t visible in the image. Return one entry per uploaded ' +
+                'image, in order (image_index starts at 0).\n\nAds:\n' +
+                JSON.stringify(items.map((x: any) => ({ ad_id: x.ad_id, name: x.name, spend: x.spend, ctr: x.ctr, cpc: x.cpc })), null, 2);
+              const planRes: any = await base44.asServiceRole.integrations.Core.InvokeLLM({
+                prompt: planPrompt,
+                file_urls: userImages,
+                response_json_schema: {
+                  type: 'object',
+                  properties: {
+                    plan: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          image_index: { type: 'number' },
+                          ad_id: { type: 'string' },
+                          headline: { type: 'string' },
+                          message: { type: 'string' },
+                          reason: { type: 'string' },
+                        },
+                        required: ['image_index', 'ad_id', 'headline', 'message'],
+                      },
+                    },
+                  },
+                  required: ['plan'],
+                },
+              });
+              imagePlan = (planRes && planRes.plan) ? planRes.plan : [];
+            } catch (_e) { /* plan optional — fall back to best ad + its copy */ }
+          }
+
+          if (hashes.length) {
+            const variants: any[] = [];
+            const specCache: Record<string, any> = {};
+            const getSpec = async (adId: string): Promise<any | null> => {
+              const target = itemMap[adId];
+              if (!target || !target.creative_id) return null;
+              if (specCache[adId]) return specCache[adId];
+              const r = await fetch(`${GRAPH}/${target.creative_id}?fields=object_story_spec,name`, { headers });
+              const d: any = await r.json();
+              specCache[adId] = d.object_story_spec || null;
+              return specCache[adId];
+            };
+            for (let i = 0; i < hashes.length; i++) {
+              // Default: clone from the best performer with its AI-suggested copy.
+              let targetAdId = it.ad_id;
+              let headline = best.new_headline;
+              let message = best.new_message;
+              // Per-image AI plan overrides target ad + copy to match the image content.
+              if (userImages.length && imagePlan.length) {
+                const entry = imagePlan.find((p: any) => p.image_index === i) || imagePlan[i];
+                if (entry && itemMap[entry.ad_id]) {
+                  targetAdId = entry.ad_id;
+                  headline = entry.headline;
+                  message = entry.message;
                 }
               }
-              generated = { from: it.ad_id, ok: variants.some((v) => v.ok), count: variants.length, variants };
+              const baseSpec = await getSpec(targetAdId);
+              if (!baseSpec) continue;
+              const spec = JSON.parse(JSON.stringify(baseSpec));
+              if (spec.link_data) {
+                spec.link_data.image_hash = hashes[i];
+                if (message) spec.link_data.message = message;
+                if (headline) spec.link_data.name = headline;
+              }
+              const target = itemMap[targetAdId];
+              const label = (target.name || 'Ad') + (hashes.length > 1 ? ` (variant ${i + 1})` : ' (variant)');
+              const cr4 = await fetch(`${GRAPH}/${actId}/adcreatives`, {
+                method: 'POST',
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: label, object_story_spec: spec }),
+              });
+              const cd4: any = await cr4.json();
+              if (cd4.id) {
+                const ar3 = await fetch(`${GRAPH}/${actId}/ads`, {
+                  method: 'POST',
+                  headers: { ...headers, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name: label, adset_id: target.adset_id, creative: { creative_id: cd4.id }, status: 'PAUSED' }),
+                });
+                const adData: any = await ar3.json();
+                variants.push({ new_ad_id: adData.id, ok: !adData.error, error: adData.error?.message, cloned_from: targetAdId, headline, message });
+              } else {
+                variants.push({ ok: false, error: cd4.error?.message || 'creative create failed', cloned_from: targetAdId });
+              }
             }
+            generated = { from: it.ad_id, ok: variants.some((v) => v.ok), count: variants.length, variants, image_plan: imagePlan };
           }
 
           // 3b. Video variants — upload user videos and build video creatives.
