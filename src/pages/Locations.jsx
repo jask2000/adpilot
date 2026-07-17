@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, MapPin, Trash2 } from 'lucide-react';
+import { Loader2, MapPin, Trash2, Pencil, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import LocationFormDialog from '@/components/LocationFormDialog';
 
 export default function Locations() {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -32,16 +35,34 @@ export default function Locations() {
     }
   };
 
+  const openAdd = () => { setEditing(null); setDialogOpen(true); };
+  const openEdit = (loc) => { setEditing(loc); setDialogOpen(true); };
+
+  const handleSave = async (form) => {
+    if (editing) {
+      const updated = await base44.entities.Location.update(editing.id, form);
+      setLocations((prev) => prev.map((l) => (l.id === editing.id ? { ...l, ...updated } : l)));
+    } else {
+      const created = await base44.entities.Location.create(form);
+      setLocations((prev) => [...prev, created]);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 max-w-6xl">
-      <div>
-        <h1 className="text-2xl font-heading font-semibold flex items-center gap-2">
-          <MapPin className="h-6 w-6" /> HellCrust Locations
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {locations.length} store locations imported from hellcrustpizza.com — each is its own targetable audience.
-          Pick the ones you want on the Quick Sales page to build a geo-targeted ad.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-heading font-semibold flex items-center gap-2">
+            <MapPin className="h-6 w-6" /> HellCrust Locations
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {locations.length} store locations imported from hellcrustpizza.com — each is its own targetable audience.
+            Pick the ones you want on the Quick Sales page to build a geo-targeted ad.
+          </p>
+        </div>
+        <Button onClick={openAdd} className="shrink-0">
+          <Plus className="h-4 w-4" /> Add location
+        </Button>
       </div>
 
       {loading ? (
@@ -72,21 +93,40 @@ export default function Locations() {
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-xs font-medium">
                     Audience ready
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => handleDelete(l)}
-                    title="Delete location"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => openEdit(l)}
+                      title="Edit location"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDelete(l)}
+                      title="Delete location"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <LocationFormDialog
+        open={dialogOpen}
+        initial={editing}
+        mode={editing ? 'edit' : 'add'}
+        onClose={() => setDialogOpen(false)}
+        onSave={handleSave}
+      />
     </div>
   );
 }
