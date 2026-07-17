@@ -165,11 +165,21 @@ Deno.serve(async (req) => {
     //    (new_headline / new_message) to the new creative's link_data.
     let generated: any = null;
     if (generate) {
-      const best = analyses
-        .filter((a: any) => a.generate_variant && itemMap[a.ad_id]?.creative_id)
-        .sort((x: any, y: any) => (y.score || 0) - (x.score || 0))[0];
       const userImages: string[] = Array.isArray(body.variant_images) ? body.variant_images.filter(Boolean) : [];
       const userVideos: string[] = Array.isArray(body.variant_videos) ? body.variant_videos.filter(Boolean) : [];
+
+      // Pick the best ad to clone a variant from. Prefer ads the AI flagged for
+      // a variant; if none were flagged BUT the user supplied their own media,
+      // fall back to the top-scoring ad that has a creative so their uploads
+      // are always used.
+      let best = analyses
+        .filter((a: any) => a.generate_variant && itemMap[a.ad_id]?.creative_id)
+        .sort((x: any, y: any) => (y.score || 0) - (x.score || 0))[0];
+      if (!best && (userImages.length || userVideos.length)) {
+        best = analyses
+          .filter((a: any) => itemMap[a.ad_id]?.creative_id)
+          .sort((x: any, y: any) => (y.score || 0) - (x.score || 0))[0];
+      }
 
       if (best) {
         const it = itemMap[best.ad_id];
