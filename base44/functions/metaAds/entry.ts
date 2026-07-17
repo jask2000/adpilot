@@ -36,7 +36,9 @@ Deno.serve(async (req) => {
         for (const row of (idata.data || [])) insightsMap[row.campaign_id] = row;
       } catch (_e) { /* insights optional */ }
 
-      const campaigns = (cdata.data || []).map((c: any) => ({ ...c, insights: insightsMap[c.id] || null }));
+      const campaigns = (cdata.data || [])
+        .filter((c: any) => c.status !== 'ARCHIVED' && c.effective_status !== 'ARCHIVED')
+        .map((c: any) => ({ ...c, insights: insightsMap[c.id] || null }));
       return Response.json({ campaigns });
     }
 
@@ -101,10 +103,33 @@ Deno.serve(async (req) => {
     if (action === 'delete_campaign') {
       const { campaign_id } = body;
       if (!campaign_id) return Response.json({ error: 'campaign_id required' }, { status: 400 });
-      const r = await fetch(`${GRAPH}/${campaign_id}`, { method: 'DELETE', headers });
-      const data = await r.json();
-      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
-      return Response.json({ success: true });
+      // Meta rarely hard-deletes campaigns that have already run (they return
+      // "campaign cannot be deleted" errors). Archive it first — archived
+      // campaigns disappear from the dashboard — then attempt the hard delete
+      // and tolerate failure since the archive is the real "remove" here.
+      let archived = false;
+      try {
+        const ar = await fetch(`${GRAPH}/${campaign_id}`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'ARCHIVED' }),
+        });
+        const ad: any = await ar.json();
+        archived = !ad.error;
+      } catch (_e) { /* ignore — try delete anyway */ }
+
+      let errMsg: string | null = null;
+      let deleted = false;
+      try {
+        const r = await fetch(`${GRAPH}/${campaign_id}`, { method: 'DELETE', headers });
+        const data: any = await r.json();
+        if (data.error) errMsg = data.error.message;
+        else deleted = true;
+      } catch (e) { errMsg = (e as Error).message; }
+
+      if (deleted) return Response.json({ success: true, action: 'deleted' });
+      if (archived) return Response.json({ success: true, action: 'archived' });
+      return Response.json({ error: errMsg || 'Delete failed' }, { status: 502 });
     }
 
     if (action === 'create_ad') {
