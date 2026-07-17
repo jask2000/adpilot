@@ -367,6 +367,29 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, spend_cap: Math.round(Number(cap) * 100) });
     }
 
+    if (action === 'list_used_image_hashes') {
+      const { account_id } = body;
+      if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const hashes = new Set<string>();
+      let url: string | null = `${GRAPH}/${actId}/adcreatives?fields=id,object_story_spec&limit=200`;
+      let guard = 0;
+      while (url && guard < 10) {
+        guard++;
+        const r = await fetch(url, { headers });
+        const data: any = await r.json();
+        if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+        for (const c of (data.data || [])) {
+          const json = JSON.stringify(c.object_story_spec || {});
+          // collect every image_hash value referenced inside the story spec
+          const matches = json.match(/"image_hash":"([^"]+)"/g) || [];
+          for (const mm of matches) hashes.add(mm.match(/"image_hash":"([^"]+)"/)![1]);
+        }
+        url = data.paging && data.paging.next ? data.paging.next : null;
+      }
+      return Response.json({ hashes: Array.from(new Set(hashes)) });
+    }
+
     if (action === 'list_media') {
       const { account_id } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
