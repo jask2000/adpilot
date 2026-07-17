@@ -371,6 +371,49 @@ Deno.serve(async (req) => {
       return Response.json({ media: data.data || [] });
     }
 
+    if (action === 'delete_media') {
+      const { account_id, hash } = body;
+      if (!account_id || !hash) return Response.json({ error: 'account_id and hash required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const r = await fetch(`${GRAPH}/${actId}/adimages?hash=${encodeURIComponent(hash)}`, { method: 'DELETE', headers });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ success: true });
+    }
+
+    if (action === 'upload_media') {
+      const { account_id, image_base64, image_filename } = body;
+      if (!account_id || !image_base64) return Response.json({ error: 'account_id and image_base64 required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      try {
+        const b64 = String(image_base64).split(',').pop() || '';
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const filename = image_filename || `upload_${Date.now()}.jpg`;
+        const boundary = 'b44boundary' + Math.random().toString().slice(2);
+        const head =
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="filename"\r\n\r\n${filename}\r\n` +
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="${filename}"; filename="${filename}"\r\n` +
+          `Content-Type: image/jpeg\r\n\r\n`;
+        const tail = `\r\n--${boundary}--\r\n`;
+        const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${boundary}` });
+        const r = await fetch(`${GRAPH}/${actId}/adimages`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+          body: blob,
+        });
+        const data: any = await r.json();
+        if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+        const hash = data?.images?.[filename]?.hash || null;
+        return Response.json({ success: true, hash, filename });
+      } catch (e) {
+        return Response.json({ error: 'image upload failed: ' + (e as Error).message }, { status: 502 });
+      }
+    }
+
     return Response.json({ error: 'Unknown action' }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
