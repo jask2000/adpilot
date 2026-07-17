@@ -45,6 +45,7 @@ export default function CreateAdForm({ account }) {
   const [image, setImage] = useState(null);
   const [audiences, setAudiences] = useState([]);
   const [audienceId, setAudienceId] = useState('');
+  const [audienceKind, setAudienceKind] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -59,7 +60,7 @@ export default function CreateAdForm({ account }) {
           action: 'list_audiences',
           account_id: account.account_id || account.id,
         });
-        setAudiences((res.data.audiences || []).filter((a) => a.kind !== 'saved'));
+        setAudiences(res.data.audiences || []);
       } catch (_e) {
         /* audiences optional */
       }
@@ -98,6 +99,7 @@ export default function CreateAdForm({ account }) {
         link: form.link,
         call_to_action_type: form.cta,
         audience_id: audienceId || null,
+        audience_kind: audienceKind || null,
         image_base64: image?.base64 || null,
         image_filename: image?.name || null,
       });
@@ -210,14 +212,27 @@ export default function CreateAdForm({ account }) {
 
           <div className="space-y-1.5">
             <Label>Target audience (optional)</Label>
-            <Select value={audienceId} onValueChange={setAudienceId}>
+            <Select
+              value={audienceId || 'none'}
+              onValueChange={(v) => {
+                if (v === 'none') {
+                  setAudienceId('');
+                  setAudienceKind('');
+                  return;
+                }
+                setAudienceId(v);
+                const a = audiences.find((x) => x.id === v);
+                setAudienceKind(a?.kind || '');
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="None — default geo targeting" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="none">None — default geo targeting</SelectItem>
                 {audiences.map((a) => (
                   <SelectItem key={a.id} value={a.id}>
-                    {a.name} ({a.subtype})
+                    {a.name} ({a.kind === 'saved' ? 'Saved' : a.subtype || 'Custom'})
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -136,6 +136,16 @@ Deno.serve(async (req) => {
 
       // 2. Ad set
       const budgetCents = Math.round(Number(daily_budget || 0) * 100);
+      let targeting: any = { geo_locations: { countries: ['US', 'CA'] } };
+      if (body.audience_id) {
+        if (body.audience_kind === 'saved') {
+          const tr = await fetch(`${GRAPH}/${body.audience_id}?fields=targeting`, { headers });
+          const td: any = await tr.json();
+          if (!td.error && td.targeting) targeting = td.targeting;
+        } else {
+          targeting = { custom_audiences: [{ id: body.audience_id }] };
+        }
+      }
       const ar = await fetch(`${GRAPH}/${actId}/adsets`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
@@ -145,9 +155,7 @@ Deno.serve(async (req) => {
           daily_budget: String(budgetCents),
           billing_event: 'IMPRESSIONS',
           optimization_goal,
-          targeting: body.audience_id
-            ? { custom_audiences: [{ id: body.audience_id }] }
-            : { geo_locations: { countries: ['US', 'CA'] } },
+          targeting,
           status: 'PAUSED',
         }),
       });
