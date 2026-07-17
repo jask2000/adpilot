@@ -12,6 +12,7 @@ export default function Media() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(new Set());
+  const [delProgress, setDelProgress] = useState(null);
   const fileRef = useRef(null);
 
   const loadMedia = async (actId) => {
@@ -110,16 +111,18 @@ export default function Media() {
     if (!confirm(`Delete ${count} selected image${count > 1 ? 's' : ''} from your ad account?`)) return;
     setBusy(true);
     setError(null);
+    setDelProgress({ done: 0, total: count });
     const hashes = Array.from(selected);
-    const failed = [];
-    for (const hash of hashes) {
-      try {
-        await base44.functions.invoke('metaAds', { action: 'delete_media', account_id: accountId, hash });
-      } catch (e) {
-        failed.push(hash);
-      }
-    }
+    let done = 0;
+    const results = await Promise.allSettled(
+      hashes.map((hash) =>
+        base44.functions.invoke('metaAds', { action: 'delete_media', account_id: accountId, hash })
+          .finally(() => setDelProgress({ done: ++done, total: count })),
+      ),
+    );
+    const failed = hashes.filter((_, i) => results[i].status === 'rejected');
     setSelected(new Set(failed));
+    setDelProgress(null);
     await loadMedia(accountId);
     if (failed.length) setError(`${failed.length} image(s) could not be deleted.`);
     setBusy(false);
@@ -178,8 +181,14 @@ export default function Media() {
               onClick={handleDeleteSelected}
               disabled={!selected.size || busy}
             >
-              <Trash2 className="h-4 w-4" />
-              Delete selected ({selected.size})
+              {busy && delProgress ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              {busy && delProgress
+                ? `Deleting ${delProgress.done}/${delProgress.total}…`
+                : `Delete selected (${selected.size})`}
             </Button>
           </div>
         </CardHeader>
