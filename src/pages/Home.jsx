@@ -6,6 +6,7 @@ import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components
 import { RefreshCw, Megaphone } from 'lucide-react';
 import AccountPicker from '@/components/AccountPicker';
 import CampaignRow from '@/components/CampaignRow';
+import PerformanceAnalysis from '@/components/PerformanceAnalysis';
 
 export default function Home() {
   const [accounts, setAccounts] = useState(null);
@@ -201,6 +202,8 @@ export default function Home() {
               )}
             </CardContent>
           </Card>
+
+          <PerformanceAnalysis campaigns={campaigns} />
         </>
       )}
     </div>
