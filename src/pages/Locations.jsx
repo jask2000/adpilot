@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, MapPin } from 'lucide-react';
+import { Loader2, MapPin, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 export default function Locations() {
   const [locations, setLocations] = useState([]);
@@ -20,6 +21,16 @@ export default function Locations() {
       }
     })();
   }, []);
+
+  const handleDelete = async (loc) => {
+    if (!confirm(`Delete "${loc.name}"? This removes it as a targetable audience.`)) return;
+    try {
+      await base44.entities.Location.delete(loc.id);
+      setLocations((prev) => prev.filter((l) => l.id !== loc.id));
+    } catch (e) {
+      alert('Failed to delete location: ' + (e.message || 'Unknown error'));
+    }
+  };
 
   return (
     <div className="p-6 space-y-6 max-w-6xl">
@@ -57,8 +68,19 @@ export default function Locations() {
               <CardContent>
                 {l.address && <p className="text-sm text-muted-foreground">{l.address}</p>}
                 {l.postal_code && <p className="text-xs text-muted-foreground mt-1">{l.postal_code}</p>}
-                <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-xs font-medium">
-                  Audience ready
+                <div className="mt-4 flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-xs font-medium">
+                    Audience ready
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleDelete(l)}
+                    title="Delete location"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
