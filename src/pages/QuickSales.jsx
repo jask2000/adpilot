@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Sparkles, CheckCircle2, AlertCircle, Check } from 'lucide-react';
+import { Loader2, Sparkles, CheckCircle2, AlertCircle, Check, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function QuickSales() {
@@ -18,6 +18,9 @@ export default function QuickSales() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+
+  const [storeLocations, setStoreLocations] = useState([]);
+  const [selectedLocs, setSelectedLocs] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -38,6 +41,8 @@ export default function QuickSales() {
         setAccountId(actId);
         const res = await base44.functions.invoke('metaAds', { action: 'list_media', account_id: actId });
         setMedia(res.data?.media || []);
+        const locs = await base44.entities.Location.list();
+        setStoreLocations(locs);
       } catch (e) {
         setError(e.message);
       } finally {
@@ -46,10 +51,18 @@ export default function QuickSales() {
     })();
   }, []);
 
+  const toggleLoc = (id) => {
+    setSelectedLocs((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     if (!selectedHash) {
       setError('Pick an image first.');
+      return;
+    }
+    if (selectedLocs.length === 0) {
+      setError('Select at least one location to target.');
       return;
     }
     setLoading(true);
@@ -57,6 +70,10 @@ export default function QuickSales() {
     setResult(null);
     try {
       const today = new Date().toLocaleDateString();
+      const locations = selectedLocs
+        .map((id) => storeLocations.find((x) => x.id === id))
+        .filter(Boolean)
+        .map((l) => ({ city: l.city, province: l.province, country: 'CA' }));
       const res = await base44.functions.invoke('metaAds', {
         action: 'create_ad',
         account_id: accountId,
@@ -69,6 +86,7 @@ export default function QuickSales() {
         headline: 'Shop Now',
         call_to_action_type: 'SHOP_NOW',
         image_hash: selectedHash,
+        locations,
       });
       setResult(res.data || res);
     } catch (err) {
@@ -85,7 +103,7 @@ export default function QuickSales() {
           <Sparkles className="h-6 w-6" /> Quick Sales Campaign
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Pick an image, set a budget and link — we handle the rest (objective, creative, pixel, naming).
+          Pick an image and the location(s) you want to advertise — we handle the rest (objective, creative, pixel, geo-targeting, naming).
         </p>
       </div>
 
@@ -135,7 +153,46 @@ export default function QuickSales() {
 
       <Card>
         <CardHeader>
-          <CardTitle>2. Budget &amp; link</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <MapPin className="h-5 w-5" /> 2. Select location(s) to target
+          </CardTitle>
+          <CardDescription>
+            {selectedLocs.length} selected — your ad will geo-target these cities (10-mile radius each).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {storeLocations.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No store locations imported yet.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {storeLocations.map((l) => {
+                const isSel = selectedLocs.includes(l.id);
+                return (
+                  <button
+                    key={l.id}
+                    type="button"
+                    onClick={() => toggleLoc(l.id)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors',
+                      isSel
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-accent text-foreground border-border'
+                    )}
+                  >
+                    {isSel && <Check className="h-3.5 w-3.5" />}
+                    {l.name}
+                    <span className="text-xs opacity-70">· {l.city}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>3. Budget &amp; link</CardTitle>
           <CardDescription>Just the essentials — everything else is automatic.</CardDescription>
         </CardHeader>
         <CardContent>

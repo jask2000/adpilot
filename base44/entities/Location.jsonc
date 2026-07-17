@@ -1,0 +1,30 @@
+{
+  "name": "Location",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "address": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "province": {
+      "type": "string"
+    },
+    "country": {
+      "type": "string",
+      "default": "Canada"
+    },
+    "postal_code": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "city",
+    "province"
+  ]
+}

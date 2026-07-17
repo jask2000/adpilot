@@ -148,7 +148,26 @@ Deno.serve(async (req) => {
       // 2. Ad set
       const budgetCents = Math.round(Number(daily_budget || 0) * 100);
       let targeting: any = { geo_locations: { countries: ['US', 'CA'] } };
-      if (body.audience_id) {
+      if (Array.isArray(body.locations) && body.locations.length) {
+        // Build geo-targeting from selected store locations (resolve city keys)
+        const cities: any[] = [];
+        const seenKeys = new Set<string>();
+        for (const loc of body.locations) {
+          if (!loc.city) continue;
+          try {
+            const sr = await fetch(`${GRAPH}/search?type=adgeolocation&location_types=city&q=${encodeURIComponent(loc.city)}&country_code=CA&limit=5`, { headers });
+            const sd: any = await sr.json();
+            const match = (sd.data || []).find((c: any) =>
+              !loc.province || (c.region && c.region.name && c.region.name.toLowerCase() === String(loc.province).toLowerCase()));
+            const city = match || (sd.data || [])[0];
+            if (city && city.key && !seenKeys.has(city.key)) {
+              seenKeys.add(city.key);
+              cities.push({ key: city.key, radius: loc.radius || 10, distance_unit: 'mile' });
+            }
+          } catch (_e) { /* skip unresolved city */ }
+        }
+        if (cities.length) targeting = { geo_locations: { cities } };
+      } else if (body.audience_id) {
         if (body.audience_kind === 'saved') {
           const tr = await fetch(`${GRAPH}/${body.audience_id}?fields=targeting`, { headers });
           const td: any = await tr.json();
