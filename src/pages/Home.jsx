@@ -237,6 +237,7 @@ export default function Home() {
                       <CampaignRow
                         key={c.id}
                         campaign={c}
+                        accountId={accountId}
                         busy={busyId === c.id}
                         onToggle={toggle}
                         onBudget={setBudget}

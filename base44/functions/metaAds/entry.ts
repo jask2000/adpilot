@@ -816,6 +816,97 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, ad_id, new_creative_id: crData.id, was_active: wasActive });
     }
 
+    if (action === 'add_variants') {
+      const { account_id, campaign_id, variant_images, headline, message, status } = body;
+      if (!account_id || !campaign_id) return Response.json({ error: 'account_id and campaign_id required' }, { status: 400 });
+      const imgs: string[] = Array.isArray(variant_images) ? variant_images.filter(Boolean) : [];
+      if (!imgs.length) return Response.json({ error: 'variant_images required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const targetStatus = status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED';
+
+      // 1. Ad sets of the campaign — prefer an ACTIVE one, else the first.
+      const asr = await fetch(`${GRAPH}/${campaign_id}/adsets?fields=id,name,status&limit=100`, { headers });
+      const asd: any = await asr.json();
+      if (asd.error) return Response.json({ error: 'adsets: ' + asd.error.message }, { status: 502 });
+      const adsets: any[] = asd.data || [];
+      if (!adsets.length) return Response.json({ error: 'This campaign has no ad sets to add variants to.' }, { status: 400 });
+      const adset = adsets.find((a) => a.status === 'ACTIVE') || adsets[0];
+
+      // 2. Find an existing ad in that ad set to clone the creative spec from.
+      const adr = await fetch(`${GRAPH}/${adset.id}/ads?fields=id,name,creative{id}&limit=100`, { headers });
+      const add: any = await adr.json();
+      if (add.error) return Response.json({ error: 'ads: ' + add.error.message }, { status: 502 });
+      const templateAd = (add.data || []).find((a: any) => a.creative?.id) || null;
+      let baseSpec: any = null;
+      if (templateAd?.creative?.id) {
+        const cr = await fetch(`${GRAPH}/${templateAd.creative.id}?fields=object_story_spec`, { headers });
+        const cd: any = await cr.json();
+        if (!cd.error) baseSpec = cd.object_story_spec || null;
+      }
+      let page_id = baseSpec?.page_id;
+      if (!page_id) {
+        const pr = await fetch(`${GRAPH}/me/accounts?fields=id&limit=1`, { headers });
+        const pd: any = await pr.json();
+        page_id = pd.data?.[0]?.id;
+      }
+      if (!page_id) return Response.json({ error: 'No Facebook Page connected to your account.' }, { status: 400 });
+      if (!baseSpec) baseSpec = { page_id, link_data: {} };
+
+      // 3. Upload each image, build a cloned creative, create a new ad under the ad set.
+      const uploadB64 = async (dataUrl: string, filename: string): Promise<string | null> => {
+        const b64 = String(dataUrl).split(',').pop() || '';
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const boundary = 'b44var' + Math.random().toString().slice(2);
+        const head =
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="filename"\r\n\r\n${filename}\r\n` +
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="${filename}"; filename="${filename}"\r\n` +
+          `Content-Type: image/jpeg\r\n\r\n`;
+        const tail = `\r\n--${boundary}--\r\n`;
+        const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${boundary}` });
+        const ir = await fetch(`${GRAPH}/${actId}/adimages`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+          body: blob,
+        });
+        const d: any = await ir.json();
+        return d?.images?.[filename]?.hash || null;
+      };
+
+      const variants: any[] = [];
+      for (let i = 0; i < imgs.length; i++) {
+        const hash = await uploadB64(imgs[i], `variant_${i + 1}.jpg`);
+        if (!hash) { variants.push({ ok: false, error: 'image upload failed', index: i }); continue; }
+        const linkData = baseSpec.link_data ? JSON.parse(JSON.stringify(baseSpec.link_data)) : {};
+        linkData.image_hash = hash;
+        if (message) linkData.message = message;
+        if (headline) linkData.name = headline;
+        const spec = { page_id, link_data: linkData };
+        const label = (templateAd?.name || adset.name || 'Variant') + (imgs.length > 1 ? ` (variant ${i + 1})` : ' (variant)');
+        const cr4 = await fetch(`${GRAPH}/${actId}/adcreatives`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: label, object_story_spec: spec }),
+        });
+        const cd4: any = await cr4.json();
+        if (cd4.error) { variants.push({ ok: false, error: cd4.error.message, index: i }); continue; }
+        const ar3 = await fetch(`${GRAPH}/${actId}/ads`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: label, adset_id: adset.id, creative: { creative_id: cd4.id }, status: targetStatus }),
+        });
+        const adData: any = await ar3.json();
+        variants.push({ new_ad_id: adData.id, ok: !adData.error, error: adData.error?.message, index: i, status: targetStatus });
+      }
+
+      const okCount = variants.filter((v) => v.ok).length;
+      if (!okCount) return Response.json({ error: 'No variants could be created.', variants }, { status: 502 });
+      return Response.json({ success: true, created: okCount, total: variants.length, variants, adset_id: adset.id, status: targetStatus });
+    }
+
     return Response.json({ error: 'Unknown action' }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

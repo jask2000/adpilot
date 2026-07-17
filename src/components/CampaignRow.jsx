@@ -25,10 +25,13 @@ import {
   Pencil,
   Copy,
   Trash2,
+  Images,
 } from 'lucide-react';
+import AddVariantsDialog from '@/components/AddVariantsDialog';
 
 export default function CampaignRow({
   campaign,
+  accountId,
   busy,
   onToggle,
   onBudget,
@@ -43,6 +46,7 @@ export default function CampaignRow({
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState(campaign.name);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [variantsOpen, setVariantsOpen] = useState(false);
   const ins = campaign.insights || {};
 
   const saveBudget = async () => {
@@ -137,6 +141,10 @@ export default function CampaignRow({
                 <Copy className="h-4 w-4 mr-2" />
                 Copy
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setVariantsOpen(true)}>
+                <Images className="h-4 w-4 mr-2" />
+                Add image variants
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setDeleteOpen(true)}
                 className="text-destructive focus:text-destructive"
@@ -196,6 +204,13 @@ export default function CampaignRow({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AddVariantsDialog
+        accountId={accountId}
+        campaign={campaign}
+        open={variantsOpen}
+        onOpenChange={setVariantsOpen}
+      />
     </TableRow>
   );
 }
