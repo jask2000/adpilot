@@ -7,6 +7,7 @@ import { RefreshCw, Megaphone } from 'lucide-react';
 import AccountPicker from '@/components/AccountPicker';
 import CampaignRow from '@/components/CampaignRow';
 import PerformanceAnalysis from '@/components/PerformanceAnalysis';
+import SpendCapControl from '@/components/SpendCapControl';
 
 export default function Home() {
   const [accounts, setAccounts] = useState(null);
@@ -201,6 +202,8 @@ export default function Home() {
               </CardContent>
             </Card>
           </div>
+
+          <SpendCapControl accountId={accountId} />
 
           <Card>
             <CardHeader>

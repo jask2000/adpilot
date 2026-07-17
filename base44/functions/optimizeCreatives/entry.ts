@@ -101,7 +101,30 @@ Deno.serve(async (req) => {
     for (const it of items) itemMap[it.ad_id] = it;
 
     // 2. Auto-tune: pause losers, boost winners
-    if (auto_tune) {
+    // Respect account spend cap: if reached, pause everything and skip boosts.
+    let capHit = false;
+    try {
+      const sr = await fetch(`${GRAPH}/${actId}?fields=spend_cap,amount_spent`, { headers });
+      const sd: any = await sr.json();
+      const cap = sd.spend_cap ? parseInt(sd.spend_cap) : 0;
+      const spent = sd.amount_spent ? parseInt(sd.amount_spent) : 0;
+      if (cap > 0 && spent >= cap) {
+        capHit = true;
+        for (const it of items) {
+          if (it.status === 'ACTIVE') {
+            const r = await fetch(`${GRAPH}/${it.ad_id}`, {
+              method: 'POST',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'PAUSED' }),
+            });
+            const d: any = await r.json();
+            actions.push({ ad_id: it.ad_id, action: 'paused (spend cap reached)', ok: !d.error, error: d.error?.message });
+          }
+        }
+      }
+    } catch (_e) { /* ignore spend read failure */ }
+
+    if (auto_tune && !capHit) {
       for (const a of analyses) {
         const it = itemMap[a.ad_id];
         if (!it) continue;

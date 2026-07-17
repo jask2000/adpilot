@@ -287,6 +287,35 @@ Deno.serve(async (req) => {
       return Response.json({ ads: result });
     }
 
+    if (action === 'get_spend') {
+      const { account_id } = body;
+      if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const r = await fetch(`${GRAPH}/${actId}?fields=spend_cap,amount_spent,currency,balance`, { headers });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({
+        spend_cap: data.spend_cap || 0,
+        amount_spent: data.amount_spent || 0,
+        currency: data.currency || 'USD',
+        balance: data.balance || 0,
+      });
+    }
+
+    if (action === 'set_spend_cap') {
+      const { account_id, cap } = body;
+      if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const r = await fetch(`${GRAPH}/${actId}`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spend_cap: Math.round(Number(cap) * 100) }),
+      });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ success: true, spend_cap: Math.round(Number(cap) * 100) });
+    }
+
     return Response.json({ error: 'Unknown action' }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
