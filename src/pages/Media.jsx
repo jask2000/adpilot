@@ -104,6 +104,27 @@ export default function Media() {
     }
   };
 
+  const handleDeleteSelected = async () => {
+    const count = selected.size;
+    if (!count) return;
+    if (!confirm(`Delete ${count} selected image${count > 1 ? 's' : ''} from your ad account?`)) return;
+    setBusy(true);
+    setError(null);
+    const hashes = Array.from(selected);
+    const failed = [];
+    for (const hash of hashes) {
+      try {
+        await base44.functions.invoke('metaAds', { action: 'delete_media', account_id: accountId, hash });
+      } catch (e) {
+        failed.push(hash);
+      }
+    }
+    setSelected(new Set(failed));
+    await loadMedia(accountId);
+    if (failed.length) setError(`${failed.length} image(s) could not be deleted.`);
+    setBusy(false);
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -150,6 +171,15 @@ export default function Media() {
               disabled={!selected.size}
             >
               Clear
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteSelected}
+              disabled={!selected.size || busy}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete selected ({selected.size})
             </Button>
           </div>
         </CardHeader>
