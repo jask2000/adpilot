@@ -66,6 +66,47 @@ Deno.serve(async (req) => {
       return Response.json({ success: true });
     }
 
+    if (action === 'update_campaign') {
+      const { campaign_id, name } = body;
+      if (!campaign_id) return Response.json({ error: 'campaign_id required' }, { status: 400 });
+      const updateBody: any = {};
+      if (name != null) updateBody.name = name;
+      const r = await fetch(`${GRAPH}/${campaign_id}`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateBody),
+      });
+      const data = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ success: true });
+    }
+
+    if (action === 'copy_campaign') {
+      const { campaign_id } = body;
+      if (!campaign_id) return Response.json({ error: 'campaign_id required' }, { status: 400 });
+      const r = await fetch(`${GRAPH}/${campaign_id}/copies`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deep_copy: 'true',
+          status_option: 'PAUSED',
+          rename_options: { rename_strategy: 'ONLY_TOP_LEVEL_RENAME', rename_suffix: ' (copy)' },
+        }),
+      });
+      const data = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ success: true, copied_campaign_id: data.copied_campaign_id });
+    }
+
+    if (action === 'delete_campaign') {
+      const { campaign_id } = body;
+      if (!campaign_id) return Response.json({ error: 'campaign_id required' }, { status: 400 });
+      const r = await fetch(`${GRAPH}/${campaign_id}`, { method: 'DELETE', headers });
+      const data = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ success: true });
+    }
+
     return Response.json({ error: 'Unknown action' }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

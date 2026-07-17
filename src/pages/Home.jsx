@@ -99,6 +99,48 @@ export default function Home() {
     }
   };
 
+  const editCampaign = async (c, newName) => {
+    setBusyId(c.id);
+    try {
+      await base44.functions.invoke('metaAds', {
+        action: 'update_campaign',
+        campaign_id: c.id,
+        name: newName,
+      });
+      setCampaigns((cs) =>
+        (cs || []).map((x) => (x.id === c.id ? { ...x, name: newName } : x))
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const copyCampaign = async (c) => {
+    setBusyId(c.id);
+    try {
+      await base44.functions.invoke('metaAds', {
+        action: 'copy_campaign',
+        campaign_id: c.id,
+      });
+      fetchCampaigns();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const deleteCampaign = async (c) => {
+    setBusyId(c.id);
+    try {
+      await base44.functions.invoke('metaAds', {
+        action: 'delete_campaign',
+        campaign_id: c.id,
+      });
+      setCampaigns((cs) => (cs || []).filter((x) => x.id !== c.id));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const totalSpend = (campaigns || []).reduce(
     (s, c) => s + (c.insights && c.insights.spend ? parseFloat(c.insights.spend) : 0),
     0
@@ -195,6 +237,9 @@ export default function Home() {
                         busy={busyId === c.id}
                         onToggle={toggle}
                         onBudget={setBudget}
+                        onEdit={editCampaign}
+                        onCopy={copyCampaign}
+                        onDelete={deleteCampaign}
                       />
                     ))}
                   </TableBody>

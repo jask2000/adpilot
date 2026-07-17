@@ -3,13 +3,45 @@ import { TableCell, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Play, Pause, Save, Loader2 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Play,
+  Pause,
+  Save,
+  Loader2,
+  MoreVertical,
+  Pencil,
+  Copy,
+  Trash2,
+} from 'lucide-react';
 
-export default function CampaignRow({ campaign, busy, onToggle, onBudget }) {
+export default function CampaignRow({
+  campaign,
+  busy,
+  onToggle,
+  onBudget,
+  onEdit,
+  onCopy,
+  onDelete,
+}) {
   const [editing, setEditing] = useState(false);
   const [budget, setBudget] = useState(
     campaign.daily_budget ? (Number(campaign.daily_budget) / 100).toFixed(2) : ''
   );
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState(campaign.name);
   const ins = campaign.insights || {};
 
   const saveBudget = async () => {
@@ -17,6 +49,12 @@ export default function CampaignRow({ campaign, busy, onToggle, onBudget }) {
     if (isNaN(dollars)) return;
     await onBudget(campaign, dollars);
     setEditing(false);
+  };
+
+  const submitEdit = async () => {
+    if (!editName.trim()) return;
+    await onEdit(campaign, editName.trim());
+    setEditOpen(false);
   };
 
   return (
@@ -27,7 +65,9 @@ export default function CampaignRow({ campaign, busy, onToggle, onBudget }) {
           {campaign.status}
         </Badge>
       </TableCell>
-      <TableCell className="capitalize text-muted-foreground">{campaign.objective || '—'}</TableCell>
+      <TableCell className="capitalize text-muted-foreground">
+        {campaign.objective || '—'}
+      </TableCell>
       <TableCell>${ins.spend ? parseFloat(ins.spend).toFixed(2) : '0.00'}</TableCell>
       <TableCell>{ins.clicks || 0}</TableCell>
       <TableCell>{ins.ctr ? parseFloat(ins.ctr).toFixed(2) + '%' : '0%'}</TableCell>
@@ -55,27 +95,78 @@ export default function CampaignRow({ campaign, busy, onToggle, onBudget }) {
         )}
       </TableCell>
       <TableCell>
-        <Button
-          size="sm"
-          variant={campaign.status === 'ACTIVE' ? 'outline' : 'default'}
-          onClick={() => onToggle(campaign)}
-          disabled={busy}
-        >
-          {busy ? (
-            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-          ) : campaign.status === 'ACTIVE' ? (
-            <>
-              <Pause className="h-4 w-4 mr-1" />
-              Pause
-            </>
-          ) : (
-            <>
-              <Play className="h-4 w-4 mr-1" />
-              Resume
-            </>
-          )}
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant={campaign.status === 'ACTIVE' ? 'outline' : 'default'}
+            onClick={() => onToggle(campaign)}
+            disabled={busy}
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : campaign.status === 'ACTIVE' ? (
+              <>
+                <Pause className="h-4 w-4 mr-1" />
+                Pause
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4 mr-1" />
+                Resume
+              </>
+            )}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" variant="ghost" disabled={busy}>
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => {
+                  setEditName(campaign.name);
+                  setEditOpen(true);
+                }}
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onCopy(campaign)}>
+                <Copy className="h-4 w-4 mr-2" />
+                Copy
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onDelete(campaign)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </TableCell>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit campaign</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5 py-2">
+            <label className="text-sm font-medium">Campaign name</label>
+            <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submitEdit} disabled={busy}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TableRow>
   );
 }
