@@ -15,7 +15,7 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select';
-import { Loader2, Sparkles, AlertCircle, Wand2, CheckCircle2, ImagePlus, X } from 'lucide-react';
+import { Loader2, Sparkles, AlertCircle, Wand2, CheckCircle2, ImagePlus, X, Video } from 'lucide-react';
 
 const RATIOS = [
   { value: '1:1', label: '1:1 · Feed', w: 1, h: 1 },
@@ -31,6 +31,7 @@ export default function CreativeOptimizer() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [picked, setPicked] = useState([]); // [{ name, url }] data URLs
+  const [videos, setVideos] = useState([]); // [{ name, url }] data URLs
   const [ratio, setRatio] = useState('1:1');
 
   const cropToRatio = (dataUrl, rw, rh) =>
@@ -91,6 +92,7 @@ export default function CreativeOptimizer() {
         auto_tune: true,
         generate: true,
         variant_images: picked.map((p) => p.url),
+        variant_videos: videos.map((v) => v.url),
       });
       setResult(res.data);
     } catch (e) {
@@ -122,7 +124,26 @@ export default function CreativeOptimizer() {
     setPicked((prev) => [...prev, ...items]);
   };
 
-  const clearAll = () => setPicked([]);
+  const clearAll = () => { setPicked([]); setVideos([]); };
+
+  const handlePickVideo = (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    Promise.all(
+      files.map(
+        (file) =>
+          new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ name: file.name, url: reader.result });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          })
+      )
+    ).then((items) => setVideos((prev) => [...prev, ...items]));
+  };
+
+  const removeVideo = (i) => setVideos((prev) => prev.filter((_, idx) => idx !== i));
 
   const removePicked = (i) => setPicked((prev) => prev.filter((_, idx) => idx !== i));
 
@@ -207,6 +228,37 @@ export default function CreativeOptimizer() {
             <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-input text-muted-foreground hover:bg-accent">
               <ImagePlus className="h-5 w-5" />
               <input type="file" accept="image/*" multiple className="hidden" onChange={handlePick} />
+            </label>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="py-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Video className="h-4 w-4" /> Your videos (optional)
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Upload MP4 clips and the optimizer will build paused video ad variants from
+            the best-performing ad, using the same AI-suggested headline/message copy.
+            Keep clips short (under ~30s) for fastest upload.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {videos.map((v, i) => (
+              <div key={i} className="relative w-24 h-20 rounded-md overflow-hidden border bg-muted">
+                <video src={v.url} className="w-full h-full object-cover" muted />
+                <button
+                  type="button"
+                  onClick={() => removeVideo(i)}
+                  className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            <label className="flex h-20 w-24 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-input text-muted-foreground hover:bg-accent">
+              <Video className="h-5 w-5" />
+              <input type="file" accept="video/mp4,video/*" multiple className="hidden" onChange={handlePickVideo} />
             </label>
           </div>
         </CardContent>

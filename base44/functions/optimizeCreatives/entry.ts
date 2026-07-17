@@ -169,6 +169,7 @@ Deno.serve(async (req) => {
         .filter((a: any) => a.generate_variant && itemMap[a.ad_id]?.creative_id)
         .sort((x: any, y: any) => (y.score || 0) - (x.score || 0))[0];
       const userImages: string[] = Array.isArray(body.variant_images) ? body.variant_images.filter(Boolean) : [];
+      const userVideos: string[] = Array.isArray(body.variant_videos) ? body.variant_videos.filter(Boolean) : [];
 
       if (best) {
         const it = itemMap[best.ad_id];
@@ -254,6 +255,78 @@ Deno.serve(async (req) => {
                 }
               }
               generated = { from: it.ad_id, ok: variants.some((v) => v.ok), count: variants.length, variants };
+            }
+          }
+
+          // 3b. Video variants — upload user videos and build video creatives.
+          if (userVideos.length && it.creative_id) {
+            const cr3 = await fetch(`${GRAPH}/${it.creative_id}?fields=object_story_spec,name`, { headers });
+            const cd3: any = await cr3.json();
+            const baseSpec: any = cd3.object_story_spec || {};
+            const page_id = baseSpec.page_id;
+            let resolvedPageId = page_id;
+            if (!resolvedPageId) {
+              const pr = await fetch(`${GRAPH}/me/accounts?fields=id&limit=1`, { headers });
+              const pd: any = await pr.json();
+              resolvedPageId = pd.data?.[0]?.id;
+            }
+            if (resolvedPageId) {
+              const uploadVid = async (dataUrl: string, filename: string): Promise<string | null> => {
+                const b64 = String(dataUrl).split(',').pop() || '';
+                const binary = atob(b64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const boundary = 'b44vid' + Math.random().toString().slice(2);
+                const head =
+                  `--${boundary}\r\n` +
+                  `Content-Disposition: form-data; name="source"; filename="${filename}"\r\n` +
+                  `Content-Type: video/mp4\r\n\r\n`;
+                const tail = `\r\n--${boundary}--\r\n`;
+                const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${boundary}` });
+                const vr = await fetch(`${GRAPH}/${actId}/advideos`, {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+                  body: blob,
+                });
+                const d: any = await vr.json();
+                return d?.id || null;
+              };
+              const vidVariants: any[] = [];
+              for (let i = 0; i < userVideos.length; i++) {
+                const vidId = await uploadVid(userVideos[i], `variant_${i + 1}.mp4`);
+                if (!vidId) { vidVariants.push({ ok: false, error: 'video upload failed' }); continue; }
+                const videoData: any = { video_id: vidId };
+                if (best.new_message) videoData.message = best.new_message;
+                if (best.new_headline) videoData.title = best.new_headline;
+                const label = (it.name || 'Ad') + (userVideos.length > 1 ? ` (video ${i + 1})` : ' (video)');
+                const spec = { page_id: resolvedPageId, video_data: videoData };
+                const cr4 = await fetch(`${GRAPH}/${actId}/adcreatives`, {
+                  method: 'POST',
+                  headers: { ...headers, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name: label, object_story_spec: spec }),
+                });
+                const cd4: any = await cr4.json();
+                if (cd4.id) {
+                  const ar3 = await fetch(`${GRAPH}/${actId}/ads`, {
+                    method: 'POST',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: label, adset_id: it.adset_id, creative: { creative_id: cd4.id }, status: 'PAUSED' }),
+                  });
+                  const adData: any = await ar3.json();
+                  vidVariants.push({ new_ad_id: adData.id, ok: !adData.error, error: adData.error?.message, video_id: vidId });
+                } else {
+                  vidVariants.push({ ok: false, error: cd4.error?.message || 'video creative failed', video_id: vidId });
+                }
+              }
+              const imgOk = generated?.ok;
+              const imgCount = generated?.count || 0;
+              generated = {
+                from: it.ad_id,
+                ok: (imgOk || false) || vidVariants.some((v) => v.ok),
+                count: imgCount + vidVariants.length,
+                variants: [...(generated?.variants || []), ...vidVariants],
+                videos: vidVariants,
+              };
             }
           }
         } catch (e) {
