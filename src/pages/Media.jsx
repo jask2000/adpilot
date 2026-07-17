@@ -179,7 +179,7 @@ export default function Media() {
               {selected.size > 0
                 ? `${selected.size} of ${media.length} selected`
                 : `${media.length} images available`}
-              {usedHashes.size > 0 ? ` · ${usedHashes.size} in use by ads (not deletable)` : ''}
+              {usedHashes.size > 0 ? ` · ${usedHashes.size} in use by active ads` : ''}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">

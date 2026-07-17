@@ -371,23 +371,33 @@ Deno.serve(async (req) => {
       const { account_id } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      // 1. Find currently ACTIVE ads and their creative ids.
       const hashes = new Set<string>();
-      let url: string | null = `${GRAPH}/${actId}/adcreatives?fields=id,object_story_spec&limit=200`;
+      const creativeIds = new Set<string>();
+      let url: string | null = `${GRAPH}/${actId}/ads?fields=id,effective_status,creative{id}&limit=200&effective_status=["ACTIVE"]`;
       let guard = 0;
       while (url && guard < 10) {
         guard++;
         const r = await fetch(url, { headers });
         const data: any = await r.json();
         if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
-        for (const c of (data.data || [])) {
-          const json = JSON.stringify(c.object_story_spec || {});
-          // collect every image_hash value referenced inside the story spec
-          const matches = json.match(/"image_hash":"([^"]+)"/g) || [];
-          for (const mm of matches) hashes.add(mm.match(/"image_hash":"([^"]+)"/)![1]);
+        for (const ad of (data.data || [])) {
+          if (ad.creative?.id) creativeIds.add(ad.creative.id);
         }
         url = data.paging && data.paging.next ? data.paging.next : null;
       }
-      return Response.json({ hashes: Array.from(new Set(hashes)) });
+      // 2. Fetch each creative's object_story_spec and pull out image hashes.
+      for (const cid of Array.from(creativeIds)) {
+        try {
+          const r = await fetch(`${GRAPH}/${cid}?fields=object_story_spec`, { headers });
+          const data: any = await r.json();
+          if (data.error) continue;
+          const json = JSON.stringify(data.object_story_spec || {});
+          const matches = json.match(/"image_hash":"([^"]+)"/g) || [];
+          for (const mm of matches) hashes.add(mm.match(/"image_hash":"([^"]+)"/)![1]);
+        } catch (_e) { /* skip */ }
+      }
+      return Response.json({ hashes: Array.from(hashes), active_ads: creativeIds.size });
     }
 
     if (action === 'list_media') {
