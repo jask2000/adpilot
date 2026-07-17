@@ -232,7 +232,7 @@ Deno.serve(async (req) => {
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
       const [cr, sr] = await Promise.all([
         fetch(`${GRAPH}/${actId}/customaudiences?fields=id,name,subtype,approximate_count,description,status,time_updated&limit=200`, { headers }),
-        fetch(`${GRAPH}/${actId}/savedaudiences?fields=id,name,approximate_count,description,status,time_updated&limit=200`, { headers }),
+        fetch(`${GRAPH}/${actId}/saved_audiences?fields=id,name,description,status,time_updated&limit=200`, { headers }),
       ]);
       const cdata: any = await cr.json();
       if (cdata.error) return Response.json({ error: cdata.error.message }, { status: 502 });
