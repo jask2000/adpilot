@@ -330,6 +330,16 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, spend_cap: Math.round(Number(cap) * 100) });
     }
 
+    if (action === 'list_media') {
+      const { account_id } = body;
+      if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const r = await fetch(`${GRAPH}/${actId}/adimages?fields=id,name,hash,url,width,height,created_time&limit=200`, { headers });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ media: data.data || [] });
+    }
+
     return Response.json({ error: 'Unknown action' }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
