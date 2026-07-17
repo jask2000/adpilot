@@ -10,6 +10,7 @@ import ScrollToTop from './components/ScrollToTop';
 import Layout from '@/components/Layout';
 import Home from '@/pages/Home';
 import AutoRules from '@/pages/AutoRules';
+import CreateAd from '@/pages/CreateAd';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -41,6 +42,7 @@ const AuthenticatedApp = () => {
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/auto-rules" element={<AutoRules />} />
+        <Route path="/create-ad" element={<CreateAd />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
