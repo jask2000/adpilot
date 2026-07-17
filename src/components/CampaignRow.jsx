@@ -42,6 +42,7 @@ export default function CampaignRow({
   );
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState(campaign.name);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const ins = campaign.insights || {};
 
   const saveBudget = async () => {
@@ -137,7 +138,7 @@ export default function CampaignRow({
                 Copy
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => onDelete(campaign)}
+                onClick={() => setDeleteOpen(true)}
                 className="text-destructive focus:text-destructive"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -163,6 +164,34 @@ export default function CampaignRow({
             </Button>
             <Button onClick={submitEdit} disabled={busy}>
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete campaign?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            This permanently deletes “{campaign.name}” and all its ad sets and ads.
+            This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={busy}
+              onClick={() => {
+                setDeleteOpen(false);
+                onDelete(campaign);
+              }}
+            >
+              {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
