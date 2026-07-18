@@ -20,6 +20,8 @@ import {
   Replace,
   AlertCircle,
   CheckCircle2,
+  Trash2,
+  Power,
 } from 'lucide-react';
 
 const BYO_META_CONNECTOR_ID = '6a5b27f11aebac85bf090c18';
@@ -72,6 +74,7 @@ export default function ReplaceCreative({ account }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [adAction, setAdAction] = useState(null); // { loading, error }
 
   const fetchAds = async () => {
     if (!account) return;
@@ -165,6 +168,38 @@ export default function ReplaceCreative({ account }) {
   };
 
   const selectedAd = (ads || []).find((a) => a.id === adId);
+
+  const toggleAdStatus = async () => {
+    if (!selectedAd) return;
+    const next = selectedAd.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    setAdAction({ loading: true, error: null });
+    try {
+      await base44.functions.invoke('metaAds', {
+        action: 'update_ad_status',
+        ad_id: selectedAd.id,
+        status: next,
+      });
+      setAds((prev) => (prev || []).map((a) => (a.id === selectedAd.id ? { ...a, status: next } : a)));
+      setAdAction({ loading: false, error: null });
+    } catch (e) {
+      setAdAction({ loading: false, error: e?.message || 'Failed' });
+    }
+  };
+
+  const deleteAd = async () => {
+    if (!selectedAd) return;
+    if (!window.confirm(`Delete "${selectedAd.name}"? This cannot be undone.`)) return;
+    setAdAction({ loading: true, error: null });
+    try {
+      await base44.functions.invoke('metaAds', { action: 'delete_ad', ad_id: selectedAd.id });
+      setAdId(null);
+      setAds((prev) => (prev || []).filter((a) => a.id !== selectedAd.id));
+      setAdAction({ loading: false, error: null });
+      fetchAds();
+    } catch (e) {
+      setAdAction({ loading: false, error: e?.message || 'Delete failed' });
+    }
+  };
 
   const replace = async () => {
     if (!adId) { setError('Select an ad first.'); return; }
@@ -268,6 +303,40 @@ export default function ReplaceCreative({ account }) {
               ))}
             </SelectContent>
           </Select>
+          {selectedAd && (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={selectedAd.status === 'ACTIVE' ? 'outline' : 'default'}
+                className="h-7 text-xs"
+                disabled={adAction?.loading}
+                onClick={toggleAdStatus}
+              >
+                {adAction?.loading ? (
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                ) : (
+                  <Power className="h-3 w-3 mr-1" />
+                )}
+                {selectedAd.status === 'ACTIVE' ? 'Pause' : 'Activate'}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                disabled={adAction?.loading}
+                title="Delete ad"
+                onClick={deleteAd}
+              >
+                {adAction?.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+          )}
+          {adAction?.error && (
+            <div className="flex items-start gap-2 text-xs text-destructive">
+              <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+              <span className="break-all">{adAction.error}</span>
+            </div>
+          )}
         </div>
 
         {selectedAd?.thumbnail && (
