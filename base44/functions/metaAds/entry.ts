@@ -797,7 +797,11 @@ Deno.serve(async (req) => {
         body: JSON.stringify({ name: (adData.name || 'Ad') + ' (replaced)', object_story_spec: newSpec }),
       });
       const crData: any = await crRes.json();
-      if (crData.error) return Response.json({ error: 'creative: ' + crData.error.message }, { status: 502 });
+      if (crData.error) {
+        const e = crData.error;
+        const detail = [e.message, e.error_subcode ? `subcode ${e.error_subcode}` : '', e.error_user_msg, e.error_user_title].filter(Boolean).join(' · ');
+        return Response.json({ error: 'creative: ' + detail, sent_spec: newSpec }, { status: 502 });
+      }
 
       // 6. Point the existing ad at the new creative. Meta won't update a creative
       //    on an ACTIVE ad, so pause first and resume afterward if it was active.
