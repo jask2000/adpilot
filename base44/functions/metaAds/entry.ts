@@ -704,10 +704,16 @@ Deno.serve(async (req) => {
 
       // 2. Clone the existing creative's object_story_spec (page_id, link, CTA...)
       let baseSpec: any = {};
+      let creativeLinkUrl: string | null = null;
+      let creativeCta: any = null;
       if (oldCreativeId) {
-        const cr = await fetch(`${GRAPH}/${oldCreativeId}?fields=object_story_spec`, { headers });
+        const cr = await fetch(`${GRAPH}/${oldCreativeId}?fields=object_story_spec,link_url,call_to_action`, { headers });
         const cd: any = await cr.json();
-        if (!cd.error) baseSpec = cd.object_story_spec || {};
+        if (!cd.error) {
+          baseSpec = cd.object_story_spec || {};
+          creativeLinkUrl = cd.link_url || null;
+          creativeCta = cd.call_to_action || null;
+        }
       }
       let page_id = baseSpec.page_id;
       if (!page_id) {
@@ -788,11 +794,13 @@ Deno.serve(async (req) => {
         if (link) linkData.link = link;
         if (!linkData.link) {
           const ctaLink = (linkData.call_to_action || baseSpec.video_data?.call_to_action)?.value?.link
-            || baseSpec.video_data?.link;
+            || baseSpec.video_data?.link
+            || creativeCta?.value?.link
+            || creativeLinkUrl;
           if (ctaLink) linkData.link = ctaLink;
         }
-        if (!linkData.call_to_action && baseSpec.video_data?.call_to_action) {
-          linkData.call_to_action = baseSpec.video_data.call_to_action;
+        if (!linkData.call_to_action) {
+          linkData.call_to_action = baseSpec.video_data?.call_to_action || creativeCta || undefined;
         }
         if (!linkData.link) return Response.json({ error: 'This ad has no destination link to reuse. Enter a "Link" for the replacement creative.' }, { status: 400 });
         newSpec = { page_id, link_data: linkData };
