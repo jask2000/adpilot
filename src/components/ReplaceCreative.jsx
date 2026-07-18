@@ -187,10 +187,11 @@ export default function ReplaceCreative({ account }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          The first asset replaces the selected ad's creative (active ads are
-          briefly paused and resumed). Each additional image or video becomes a
-          new variant ad under the same ad set — so every placement gets a
-          properly framed creative instead of auto-cropping one image.
+          All uploaded images and videos go into a single placement-optimized
+          creative on the selected ad — Meta automatically serves each asset to
+          the placement it fits best (1:1 → Feed, 4:5 → Instagram Feed, 9:16 →
+          Stories/Reels). No extra ads are created; the ad keeps its identity and
+          budget. Active ads are briefly paused and resumed.
         </p>
 
         <div className="space-y-1.5">
@@ -358,7 +359,7 @@ export default function ReplaceCreative({ account }) {
           <div className="flex items-start gap-2 text-sm text-emerald-700">
             <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              Replaced the ad's creative{result.was_active ? ' (resumed)' : ''}{result.created ? `, and created ${result.created} variant ad(s)` : ''}.
+              Replaced the ad's creative with placement-optimized assets ({result.image_count || 0} image(s), {result.video_count || 0} video(s)){result.was_active ? ' — ad resumed' : ''}.
             </span>
           </div>
         )}
