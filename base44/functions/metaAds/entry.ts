@@ -774,6 +774,11 @@ Deno.serve(async (req) => {
       let newSpec: any;
       if (image_hash) {
         const linkData = baseSpec.link_data ? JSON.parse(JSON.stringify(baseSpec.link_data)) : {};
+        // Meta rejects a creative that carries the old image's hosted URL/crops
+        // alongside a new image_hash ("invalid parameter"). Drop the stale fields.
+        delete linkData.image_url;
+        delete linkData.image_crops;
+        delete linkData.url_tags;
         linkData.image_hash = image_hash;
         if (message) linkData.message = message;
         if (headline) linkData.name = headline;
