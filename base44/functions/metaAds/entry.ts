@@ -782,6 +782,18 @@ Deno.serve(async (req) => {
         linkData.image_hash = image_hash;
         if (message) linkData.message = message;
         if (headline) linkData.name = headline;
+        // link_data.link is required for traffic/link ads. If the original was a
+        // video creative (no link_data) the link may live in video_data or the
+        // call_to_action value — pull it across so Meta accepts the new creative.
+        if (!linkData.link) {
+          const ctaLink = (linkData.call_to_action || baseSpec.video_data?.call_to_action)?.value?.link
+            || baseSpec.video_data?.link;
+          if (ctaLink) linkData.link = ctaLink;
+        }
+        if (!linkData.call_to_action && baseSpec.video_data?.call_to_action) {
+          linkData.call_to_action = baseSpec.video_data.call_to_action;
+        }
+        if (!linkData.link) return Response.json({ error: 'This ad has no destination link to reuse. Enter a "Link" for the replacement creative.' }, { status: 400 });
         newSpec = { page_id, link_data: linkData };
       } else {
         const videoData: any = { video_id };
