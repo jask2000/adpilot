@@ -15,7 +15,7 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select';
-import { Loader2, Sparkles, AlertCircle, Wand2, CheckCircle2, ImagePlus, X, Video } from 'lucide-react';
+import { Loader2, Sparkles, AlertCircle, Wand2, CheckCircle2, ImagePlus, X, Video, Trash2 } from 'lucide-react';
 import ReplaceCreative from '@/components/ReplaceCreative';
 
 const RATIOS = [
@@ -375,32 +375,35 @@ export default function CreativeOptimizer() {
                             {v.error && <div className="text-destructive">error: {v.error}</div>}
                             {st.error && <div className="text-destructive">{st.error}</div>}
                           </div>
-                          {v.ok && id && (
+                          {id && (
                             <div className="flex items-center gap-2 shrink-0">
                               <Badge variant={isActive ? 'default' : 'secondary'}>{st.status || 'PAUSED'}</Badge>
+                              {v.ok && (
+                                <Button
+                                  size="sm"
+                                  variant={isActive ? 'outline' : 'default'}
+                                  className="h-7 text-xs"
+                                  disabled={st.busy}
+                                  onClick={() => toggleVariant(id, isActive ? 'PAUSED' : 'ACTIVE')}
+                                >
+                                  {st.busy ? (
+                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                  ) : isActive ? (
+                                    'Pause'
+                                  ) : (
+                                    'Activate'
+                                  )}
+                                </Button>
+                              )}
                               <Button
-                                size="sm"
-                                variant={isActive ? 'outline' : 'default'}
-                                className="h-7 text-xs"
-                                disabled={st.busy}
-                                onClick={() => toggleVariant(id, isActive ? 'PAUSED' : 'ACTIVE')}
-                              >
-                                {st.busy ? (
-                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                ) : isActive ? (
-                                  'Pause'
-                                ) : (
-                                  'Activate'
-                                )}
-                              </Button>
-                              <Button
-                                size="sm"
+                                size="icon"
                                 variant="ghost"
-                                className="h-7 text-xs text-destructive hover:text-destructive"
+                                className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
                                 disabled={st.busy}
+                                title="Delete variant"
                                 onClick={() => deleteVariant(id)}
                               >
-                                Delete
+                                {st.busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </Button>
                             </div>
                           )}
