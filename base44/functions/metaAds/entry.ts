@@ -937,6 +937,152 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, created: okCount, total: variants.length, variants, adset_id: adset.id, status: targetStatus });
     }
 
+    if (action === 'replace_creative_multi') {
+      const { account_id, ad_id, assets, headline, message, link } = body;
+      if (!account_id || !ad_id) return Response.json({ error: 'account_id and ad_id required' }, { status: 400 });
+      const list: any[] = Array.isArray(assets) ? assets.filter((a) => a && (a.image_base64 || a.video_base64)) : [];
+      if (!list.length) return Response.json({ error: 'assets required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+
+      // 1. Source ad: status, adset_id, creative id
+      const adRes = await fetch(`${GRAPH}/${ad_id}?fields=id,name,status,adset_id,creative{id}`, { headers });
+      const adData: any = await adRes.json();
+      if (adData.error) return Response.json({ error: adData.error.message }, { status: 502 });
+      const adset_id = adData.adset_id;
+      const wasActive = adData.status === 'ACTIVE';
+      const targetStatus = wasActive ? 'ACTIVE' : 'PAUSED';
+
+      // 2. Clone source creative spec + top-level link/CTA
+      let baseSpec: any = {};
+      let creativeLinkUrl: string | null = null;
+      let creativeCta: any = null;
+      if (adData.creative?.id) {
+        const cr = await fetch(`${GRAPH}/${adData.creative.id}?fields=object_story_spec,link_url,call_to_action`, { headers });
+        const cd: any = await cr.json();
+        if (!cd.error) { baseSpec = cd.object_story_spec || {}; creativeLinkUrl = cd.link_url || null; creativeCta = cd.call_to_action || null; }
+      }
+      let page_id = baseSpec.page_id;
+      if (!page_id) {
+        const pr = await fetch(`${GRAPH}/me/accounts?fields=id&limit=1`, { headers });
+        const pd: any = await pr.json();
+        page_id = pd.data?.[0]?.id;
+      }
+      if (!page_id) return Response.json({ error: 'No Facebook Page connected to your account.' }, { status: 400 });
+
+      const uploadImage = async (dataUrl: string, filename: string): Promise<string | null> => {
+        const b64 = String(dataUrl).split(',').pop() || '';
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const boundary = 'b44m' + Math.random().toString().slice(2);
+        const head =
+          `--${boundary}\r\nContent-Disposition: form-data; name="filename"\r\n\r\n${filename}\r\n` +
+          `--${boundary}\r\nContent-Disposition: form-data; name="${filename}"; filename="${filename}"\r\nContent-Type: image/jpeg\r\n\r\n`;
+        const tail = `\r\n--${boundary}--\r\n`;
+        const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${boundary}` });
+        const r = await fetch(`${GRAPH}/${actId}/adimages`, { method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` }, body: blob });
+        const d: any = await r.json();
+        return d?.images?.[filename]?.hash || null;
+      };
+      const uploadVideo = async (dataUrl: string, filename: string): Promise<string | null> => {
+        const b64 = String(dataUrl).split(',').pop() || '';
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const boundary = 'b44mv' + Math.random().toString().slice(2);
+        const head = `--${boundary}\r\nContent-Disposition: form-data; name="source"; filename="${filename}"\r\nContent-Type: video/mp4\r\n\r\n`;
+        const tail = `\r\n--${boundary}--\r\n`;
+        const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${boundary}` });
+        const r = await fetch(`${GRAPH}/${actId}/advideos`, { method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` }, body: blob });
+        const d: any = await r.json();
+        return d.id || null;
+      };
+
+      const deriveLink = (linkData: any): string | null => {
+        if (linkData.link) return linkData.link;
+        if (link) return link;
+        const ctaLink = (linkData.call_to_action || baseSpec.video_data?.call_to_action)?.value?.link || baseSpec.video_data?.link || creativeCta?.value?.link || creativeLinkUrl;
+        return ctaLink || null;
+      };
+
+      const buildImageSpec = (hash: string): any | null => {
+        const linkData = baseSpec.link_data ? JSON.parse(JSON.stringify(baseSpec.link_data)) : {};
+        delete linkData.image_url; delete linkData.image_crops; delete linkData.url_tags;
+        linkData.image_hash = hash;
+        if (message) linkData.message = message;
+        if (headline) linkData.name = headline;
+        const l = deriveLink(linkData);
+        if (l) linkData.link = l;
+        if (!linkData.call_to_action) linkData.call_to_action = baseSpec.video_data?.call_to_action || creativeCta || undefined;
+        if (!linkData.link) return null;
+        return { page_id, link_data: linkData };
+      };
+      const buildVideoSpec = (video_id: string): any => {
+        const videoData: any = { video_id };
+        if (message) videoData.message = message;
+        if (headline) videoData.title = headline;
+        const vcta = baseSpec.video_data?.call_to_action || creativeCta;
+        if (vcta) videoData.call_to_action = vcta;
+        return { page_id, video_data: videoData };
+      };
+
+      const results: any[] = [];
+      for (let i = 0; i < list.length; i++) {
+        const a = list[i];
+        let spec: any = null;
+        try {
+          if (a.image_base64) {
+            const hash = await uploadImage(a.image_base64, a.image_filename || `asset_${i + 1}.jpg`);
+            if (!hash) { results.push({ ok: false, error: 'image upload failed', index: i }); continue; }
+            spec = buildImageSpec(hash);
+            if (!spec) { results.push({ ok: false, error: 'no destination link on source ad — enter a link', index: i }); continue; }
+          } else {
+            const vid = await uploadVideo(a.video_base64, a.video_filename || `asset_${i + 1}.mp4`);
+            if (!vid) { results.push({ ok: false, error: 'video upload failed', index: i }); continue; }
+            spec = buildVideoSpec(vid);
+          }
+          const label = (adData.name || 'Ad') + (i > 0 ? ` (variant ${i})` : '');
+          const crRes = await fetch(`${GRAPH}/${actId}/adcreatives`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: label, object_story_spec: spec }) });
+          const crData: any = await crRes.json();
+          if (crData.error) {
+            const e = crData.error;
+            const detail = [e.message, e.error_subcode ? `subcode ${e.error_subcode}` : '', e.error_user_msg].filter(Boolean).join(' · ');
+            results.push({ ok: false, error: 'creative: ' + detail, index: i }); continue;
+          }
+          if (i === 0) {
+            // Replace the source ad's creative.
+            if (wasActive) await fetch(`${GRAPH}/${ad_id}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'PAUSED' }) });
+            const upRes = await fetch(`${GRAPH}/${ad_id}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ creative: { creative_id: crData.id } }) });
+            const upData: any = await upRes.json();
+            if (upData.error) {
+              if (wasActive) await fetch(`${GRAPH}/${ad_id}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'ACTIVE' }) });
+              results.push({ ok: false, error: 'ad update: ' + upData.error.message, index: i }); continue;
+            }
+            if (wasActive) await fetch(`${GRAPH}/${ad_id}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'ACTIVE' }) });
+            results.push({ ok: true, replaced: true, index: i });
+          } else {
+            if (!adset_id) { results.push({ ok: false, error: 'source ad has no ad set — cannot create variants', index: i }); continue; }
+            const arRes = await fetch(`${GRAPH}/${actId}/ads`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: label, adset_id, creative: { creative_id: crData.id }, status: targetStatus }) });
+            const adOut: any = await arRes.json();
+            results.push({ ok: !adOut.error, error: adOut.error?.message, new_ad_id: adOut.id, index: i, status: targetStatus });
+          }
+        } catch (e) {
+          results.push({ ok: false, error: (e as Error).message, index: i });
+        }
+      }
+
+      const okCount = results.filter((r) => r.ok).length;
+      if (!okCount) return Response.json({ error: 'No assets could be applied.', results }, { status: 502 });
+      return Response.json({
+        success: true,
+        replaced: results[0]?.ok && results[0]?.replaced ? true : false,
+        created: results.filter((r) => r.ok && !r.replaced).length,
+        total: results.length,
+        results,
+        was_active: wasActive,
+      });
+    }
+
     return Response.json({ error: 'Unknown action' }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

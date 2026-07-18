@@ -29,13 +29,39 @@ const RATIOS = [
   { value: '1.91:1', label: '1.91:1 · Link ads', w: 1.91, h: 1 },
 ];
 
+const cropToRatio = (dataUrl, rw, rh) =>
+  new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const targetW = 1080;
+      const targetH = Math.round((1080 * rh) / rw);
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      const srcRatio = img.width / img.height;
+      const dstRatio = targetW / targetH;
+      let sx = 0, sy = 0, sw = img.width, sh = img.height;
+      if (srcRatio > dstRatio) {
+        sw = img.height * dstRatio;
+        sx = (img.width - sw) / 2;
+      } else {
+        sh = img.width / dstRatio;
+        sy = (img.height - sh) / 2;
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetW, targetH);
+      resolve(canvas.toDataURL('image/jpeg', 0.92));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+
 export default function ReplaceCreative({ account }) {
   const [ads, setAds] = useState(null);
   const [adsLoading, setAdsLoading] = useState(false);
   const [adId, setAdId] = useState(null);
-  const [images, setImages] = useState([]);
-  const [videos, setVideos] = useState([]);
-  const [ratio, setRatio] = useState('1:1');
+  const [images, setImages] = useState([]); // { ratio, name, url }
+  const [videos, setVideos] = useState([]); // { name, url }
   const [headline, setHeadline] = useState('');
   const [message, setMessage] = useState('');
   const [link, setLink] = useState('');
@@ -65,59 +91,31 @@ export default function ReplaceCreative({ account }) {
     fetchAds();
   }, [account?.account_id]);
 
-  const cropToRatio = (dataUrl, rw, rh) =>
-    new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const targetW = 1080;
-        const targetH = Math.round((1080 * rh) / rw);
-        const canvas = document.createElement('canvas');
-        canvas.width = targetW;
-        canvas.height = targetH;
-        const ctx = canvas.getContext('2d');
-        const srcRatio = img.width / img.height;
-        const dstRatio = targetW / targetH;
-        let sx = 0, sy = 0, sw = img.width, sh = img.height;
-        if (srcRatio > dstRatio) {
-          sw = img.height * dstRatio;
-          sx = (img.width - sw) / 2;
-        } else {
-          sh = img.width / dstRatio;
-          sy = (img.height - sh) / 2;
-        }
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetW, targetH);
-        resolve(canvas.toDataURL('image/jpeg', 0.92));
-      };
-      img.onerror = () => resolve(dataUrl);
-      img.src = dataUrl;
-    });
-
-  const handlePickImage = async (e) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    if (!files.length) return;
-    const r = RATIOS.find((x) => x.value === ratio) || RATIOS[0];
-    const items = await Promise.all(
+  const addImages = async (files, ratioValue) => {
+    const r = RATIOS.find((x) => x.value === ratioValue) || RATIOS[0];
+    const made = await Promise.all(
       files.map(
         (file) =>
           new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = async () => {
               const cropped = await cropToRatio(reader.result, r.w, r.h);
-              resolve({ name: file.name, url: cropped });
+              resolve({ ratio: ratioValue, name: file.name, url: cropped });
             };
             reader.onerror = reject;
             reader.readAsDataURL(file);
           })
       )
     );
-    setImages((prev) => [...prev, ...items].slice(0, 1));
+    setImages((prev) => [...prev, ...made]);
   };
 
-  const handlePickVideo = (e) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    if (!files.length) return;
+  const setRatioFor = (i, ratioValue) =>
+    setImages((prev) => prev.map((it, idx) => (idx === i ? { ...it, ratio: ratioValue } : it)));
+
+  const removeImage = (i) => setImages((prev) => prev.filter((_, idx) => idx !== i));
+
+  const addVideos = (files) => {
     Promise.all(
       files.map(
         (file) =>
@@ -128,43 +126,42 @@ export default function ReplaceCreative({ account }) {
             reader.readAsDataURL(file);
           })
       )
-    ).then((items) => setVideos((prev) => [...prev, ...items].slice(0, 1)));
+    ).then((items) => setVideos((prev) => [...prev, ...items]));
   };
+
+  const removeVideo = (i) => setVideos((prev) => prev.filter((_, idx) => idx !== i));
 
   const selectedAd = (ads || []).find((a) => a.id === adId);
 
   const replace = async () => {
     if (!adId) { setError('Select an ad first.'); return; }
     if (!images.length && !videos.length) {
-      setError('Upload a replacement image or video.');
+      setError('Upload at least one image or video.');
       return;
     }
     setBusy(true);
     setError(null);
     setResult(null);
     try {
-      const base = {
-        action: 'replace_creative',
+      const assets = [
+        ...images.map((img, i) => ({
+          image_base64: img.url,
+          image_filename: `img_${i + 1}.jpg`,
+        })),
+        ...videos.map((v, i) => ({
+          video_base64: v.url,
+          video_filename: `vid_${i + 1}.mp4`,
+        })),
+      ];
+      const res = await base44.functions.invoke('metaAds', {
+        action: 'replace_creative_multi',
         account_id: account.account_id,
         ad_id: adId,
+        assets,
         headline: headline || undefined,
         message: message || undefined,
         link: link || undefined,
-      };
-      let res;
-      if (images.length) {
-        res = await base44.functions.invoke('metaAds', {
-          ...base,
-          image_base64: images[0].url,
-          image_filename: images[0].name,
-        });
-      } else {
-        res = await base44.functions.invoke('metaAds', {
-          ...base,
-          video_base64: videos[0].url,
-          video_filename: videos[0].name,
-        });
-      }
+      });
       setResult(res.data);
       setImages([]);
       setVideos([]);
@@ -185,14 +182,15 @@ export default function ReplaceCreative({ account }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
-          <Replace className="h-4 w-4" /> Replace creative on an ad
+          <Replace className="h-4 w-4" /> Replace creative — all ratios + video
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          Swap the image or video on an existing ad. The ad keeps its identity and
-          budget — only its creative changes. Active ads are briefly paused and
-          resumed automatically.
+          The first asset replaces the selected ad's creative (active ads are
+          briefly paused and resumed). Each additional image or video becomes a
+          new variant ad under the same ad set — so every placement gets a
+          properly framed creative instead of auto-cropping one image.
         </p>
 
         <div className="space-y-1.5">
@@ -236,73 +234,104 @@ export default function ReplaceCreative({ account }) {
           </div>
         )}
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">Replacement aspect ratio (images)</Label>
-          <Select value={ratio} onValueChange={setRatio}>
-            <SelectTrigger className="w-full h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {RATIOS.map((r) => (
-                <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="space-y-2">
+          <Label className="text-xs">Images (one per ratio)</Label>
+          {images.map((p, i) => {
+            const r = RATIOS.find((x) => x.value === p.ratio) || RATIOS[0];
+            const isPortrait = r.h > r.w;
+            const box = isPortrait ? 'w-14 h-20' : r.value === '1.91:1' ? 'w-24 h-14' : 'w-16 h-16';
+            return (
+              <div key={i} className="flex items-center gap-3 rounded-md border p-2 bg-muted/30">
+                <div className={`relative ${box} rounded-md overflow-hidden border bg-muted shrink-0`}>
+                  <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1 space-y-1.5">
+                  <div className="text-xs text-muted-foreground truncate">{p.name}</div>
+                  <Select value={p.ratio} onValueChange={(v) => setRatioFor(i, v)}>
+                    <SelectTrigger className="w-full h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RATIOS.map((rr) => (
+                        <SelectItem key={rr.value} value={rr.value}>{rr.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeImage(i)}
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-black/10 text-foreground hover:bg-destructive hover:text-destructive-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
+          <div className="grid grid-cols-2 gap-2">
+            {RATIOS.filter((r) => r.value !== '1:1').map((r) => (
+              <label
+                key={r.value}
+                className="flex h-14 cursor-pointer items-center justify-center gap-2 rounded-md border-2 border-dashed border-input text-muted-foreground hover:bg-accent text-xs"
+              >
+                <ImagePlus className="h-4 w-4" />
+                {r.label}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    e.target.value = '';
+                    if (files.length) addImages(files, r.value);
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+          <label className="flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-md border-2 border-dashed border-input text-muted-foreground hover:bg-accent text-xs">
+            <ImagePlus className="h-4 w-4" />
+            Add 1:1 · Feed image
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                e.target.value = '';
+                if (files.length) addImages(files, '1:1');
+              }}
+            />
+          </label>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">New image</Label>
-            <div className="flex flex-wrap gap-2">
-              {images.map((p, i) => (
-                <div key={i} className="relative w-16 h-16 rounded-md overflow-hidden border bg-muted">
-                  <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => setImages([])}
-                    className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-destructive"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-              {!images.length && (
-                <label className="flex h-16 w-16 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-input text-muted-foreground hover:bg-accent">
-                  <ImagePlus className="h-4 w-4" />
-                  <input type="file" accept="image/*" className="hidden" onChange={handlePickImage} />
-                </label>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs">New video</Label>
-            <div className="flex flex-wrap gap-2">
-              {videos.map((v, i) => (
-                <div key={i} className="relative w-20 h-16 rounded-md overflow-hidden border bg-muted">
-                  <video src={v.url} className="w-full h-full object-cover" muted />
-                  <button
-                    type="button"
-                    onClick={() => setVideos([])}
-                    className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-destructive"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-              {!videos.length && (
-                <label className="flex h-16 w-20 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-input text-muted-foreground hover:bg-accent">
-                  <Video className="h-4 w-4" />
-                  <input type="file" accept="video/mp4,video/*" className="hidden" onChange={handlePickVideo} />
-                </label>
-              )}
-            </div>
+        <div className="space-y-2">
+          <Label className="text-xs">Videos</Label>
+          <div className="flex flex-wrap gap-2">
+            {videos.map((v, i) => (
+              <div key={i} className="relative w-24 h-16 rounded-md overflow-hidden border bg-muted">
+                <video src={v.url} className="w-full h-full object-cover" muted />
+                <button
+                  type="button"
+                  onClick={() => removeVideo(i)}
+                  className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            <label className="flex h-16 w-24 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-input text-muted-foreground hover:bg-accent">
+              <Video className="h-4 w-4" />
+              <input type="file" accept="video/mp4,video/*" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files || []); e.target.value = ''; if (f.length) addVideos(f); }} />
+            </label>
           </div>
         </div>
 
         <p className="text-xs text-muted-foreground">
           Leave headline/message blank to keep the ad's existing copy, or set new
-          text to update it with the new creative.
+          text to apply across all creatives.
         </p>
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="space-y-1">
@@ -329,8 +358,15 @@ export default function ReplaceCreative({ account }) {
           <div className="flex items-start gap-2 text-sm text-emerald-700">
             <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              Creative replaced{result.was_active ? ' (ad resumed)' : ''}.
+              Replaced the ad's creative{result.was_active ? ' (resumed)' : ''}{result.created ? `, and created ${result.created} variant ad(s)` : ''}.
             </span>
+          </div>
+        )}
+        {result && !result.success && result.results && (
+          <div className="text-xs text-destructive space-y-1">
+            {result.results.filter((r) => !r.ok).map((r, i) => (
+              <div key={i}>Asset {r.index + 1}: {r.error}</div>
+            ))}
           </div>
         )}
 
