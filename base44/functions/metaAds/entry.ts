@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.38';
 
 const GRAPH = 'https://graph.facebook.com/v25.0';
+const BYO_META_CONNECTOR_ID = '6a5b27f11aebac85bf090c18';
 
 Deno.serve(async (req) => {
   try {
@@ -13,6 +14,15 @@ Deno.serve(async (req) => {
 
     const { accessToken } = await base44.asServiceRole.connectors.getConnection('meta_ads');
     const headers = { 'Authorization': `Bearer ${accessToken}` };
+
+    if (action === 'byo_status') {
+      try {
+        await base44.asServiceRole.connectors.getCurrentAppUserConnection(BYO_META_CONNECTOR_ID);
+        return Response.json({ connected: true });
+      } catch (_e) {
+        return Response.json({ connected: false });
+      }
+    }
 
     if (action === 'list_accounts') {
       const r = await fetch(`${GRAPH}/me/adaccounts?fields=account_id,name,currency,amount_spent&limit=100`, { headers });
@@ -943,6 +953,19 @@ Deno.serve(async (req) => {
       const list: any[] = Array.isArray(assets) ? assets.filter((a) => a && (a.image_base64 || a.video_base64)) : [];
       if (!list.length) return Response.json({ error: 'assets required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+
+      // Multi-ratio placement optimization requires asset_feed_spec, which the
+      // shared Meta connector app lacks (#3). Use the app user's connection via
+      // the workspace BYO Meta app (which has the capability) instead.
+      let byoToken: string;
+      try {
+        const byo = await base44.asServiceRole.connectors.getCurrentAppUserConnection(BYO_META_CONNECTOR_ID);
+        byoToken = byo.accessToken;
+      } catch (_e) {
+        return Response.json({ error: 'Connect your Meta account via the custom Meta app to use multi-ratio placement optimization. The shared connector does not support asset_feed_spec.' }, { status: 400 });
+      }
+      const headers = { 'Authorization': `Bearer ${byoToken}` };
+      const accessToken = byoToken;
 
       // Source ad: status + creative id (to clone link/CTA).
       const adRes = await fetch(`${GRAPH}/${ad_id}?fields=id,name,status,creative{id}`, { headers });
