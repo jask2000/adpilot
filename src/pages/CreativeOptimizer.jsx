@@ -34,6 +34,35 @@ export default function CreativeOptimizer() {
   const [picked, setPicked] = useState([]); // [{ name, url }] data URLs
   const [videos, setVideos] = useState([]); // [{ name, url }] data URLs
   const [ratio, setRatio] = useState('1:1');
+  // Track live state of created variants: { ad_id: { status, busy, error } }
+  const [variantStates, setVariantStates] = useState({});
+
+  const setVState = (adId, patch) =>
+    setVariantStates((prev) => ({ ...prev, [adId]: { ...(prev[adId] || {}), ...patch } }));
+
+  const toggleVariant = async (adId, target) => {
+    setVState(adId, { busy: true, error: null });
+    try {
+      await base44.functions.invoke('metaAds', {
+        action: 'update_ad_status',
+        ad_id: adId,
+        status: target,
+      });
+      setVState(adId, { status: target, busy: false });
+    } catch (e) {
+      setVState(adId, { busy: false, error: e?.message || 'Failed' });
+    }
+  };
+
+  // Seed each created variant as PAUSED when a new result arrives.
+  useEffect(() => {
+    if (!result?.generated?.variants) return;
+    const next = {};
+    for (const v of result.generated.variants) {
+      if (v.new_ad_id) next[v.new_ad_id] = { status: 'PAUSED', busy: false, error: null };
+    }
+    setVariantStates(next);
+  }, [result]);
 
   const cropToRatio = (dataUrl, rw, rh) =>
     new Promise((resolve) => {
@@ -314,6 +343,68 @@ export default function CreativeOptimizer() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {result.generated.variants && result.generated.variants.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Created variants ({result.generated.variants.length}) — check state & activate:
+                    </p>
+                    {result.generated.variants.map((v, i) => {
+                      const id = v.new_ad_id;
+                      const st = variantStates[id] || { status: 'PAUSED' };
+                      const isActive = st.status === 'ACTIVE';
+                      return (
+                        <div key={i} className="flex items-center gap-3 text-xs border rounded-md p-2 bg-muted/40">
+                          <Badge variant="outline" className="shrink-0">var {i + 1}</Badge>
+                          <div className="flex-1 space-y-0.5">
+                            <div className="font-medium">{v.new_ad_id ? `ad ${v.new_ad_id}` : 'creation failed'}</div>
+                            {v.cloned_from && <div className="text-muted-foreground">cloned from ad {v.cloned_from}</div>}
+                            {v.headline && <div className="text-muted-foreground">“{v.headline}”</div>}
+                            {v.error && <div className="text-destructive">error: {v.error}</div>}
+                            {st.error && <div className="text-destructive">{st.error}</div>}
+                          </div>
+                          {v.ok && id && (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge variant={isActive ? 'default' : 'secondary'}>{st.status || 'PAUSED'}</Badge>
+                              <Button
+                                size="sm"
+                                variant={isActive ? 'outline' : 'default'}
+                                className="h-7 text-xs"
+                                disabled={st.busy}
+                                onClick={() => toggleVariant(id, isActive ? 'PAUSED' : 'ACTIVE')}
+                              >
+                                {st.busy ? (
+                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                ) : isActive ? (
+                                  'Pause'
+                                ) : (
+                                  'Activate'
+                                )}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {result.generated.variants.some((v) => v.ok && v.new_ad_id) && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 text-xs"
+                        disabled={Object.values(variantStates).some((s) => s.busy)}
+                        onClick={() =>
+                          Promise.all(
+                            Object.keys(variantStates)
+                              .filter((id) => variantStates[id].status !== 'ACTIVE')
+                              .map((id) => toggleVariant(id, 'ACTIVE'))
+                          )
+                        }
+                      >
+                        Activate all
+                      </Button>
+                    )}
                   </div>
                 )}
               </CardContent>

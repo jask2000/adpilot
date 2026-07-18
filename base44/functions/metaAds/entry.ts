@@ -52,6 +52,19 @@ Deno.serve(async (req) => {
       return Response.json({ campaigns });
     }
 
+    if (action === 'update_ad_status') {
+      const { ad_id, status } = body;
+      if (!ad_id || !status) return Response.json({ error: 'ad_id and status required' }, { status: 400 });
+      const r = await fetch(`${GRAPH}/${ad_id}`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      const data = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ success: true });
+    }
+
     if (action === 'update_status') {
       const { campaign_id, status } = body;
       if (!campaign_id || !status) return Response.json({ error: 'campaign_id and status required' }, { status: 400 });
