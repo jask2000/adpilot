@@ -1023,9 +1023,9 @@ Deno.serve(async (req) => {
       if (imageHashes.length) af.images = imageHashes.map((h) => ({ hash: h }));
       if (videoIds.length) af.videos = videoIds.map((v) => ({ video_id: v }));
       af.bodies = [{ text: message || baseSpec.link_data?.message || baseSpec.video_data?.message || '' }];
-      af.headlines = [{ text: headline || baseSpec.link_data?.name || baseSpec.video_data?.title || adData.name || '' }];
-      af.link_url = [{ website_url: finalLink }];
-      af.call_to_action = [{ type: ctaType, value: { link: finalLink } }];
+      af.titles = [{ text: headline || baseSpec.link_data?.name || baseSpec.video_data?.title || adData.name || '' }];
+      af.link_urls = [{ website_url: finalLink }];
+      af.call_to_action_types = [ctaType];
 
       const crRes = await fetch(`${GRAPH}/${actId}/adcreatives`, {
         method: 'POST',
