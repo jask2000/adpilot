@@ -38,6 +38,7 @@ export default function ReplaceCreative({ account }) {
   const [ratio, setRatio] = useState('1:1');
   const [headline, setHeadline] = useState('');
   const [message, setMessage] = useState('');
+  const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -148,6 +149,7 @@ export default function ReplaceCreative({ account }) {
         ad_id: adId,
         headline: headline || undefined,
         message: message || undefined,
+        link: link || undefined,
       };
       let res;
       if (images.length) {
@@ -168,6 +170,7 @@ export default function ReplaceCreative({ account }) {
       setVideos([]);
       setHeadline('');
       setMessage('');
+      setLink('');
       fetchAds();
     } catch (e) {
       setError(e?.response?.data?.error || e?.message || 'Request failed');
@@ -310,6 +313,10 @@ export default function ReplaceCreative({ account }) {
             <Label className="text-xs">New message (optional)</Label>
             <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Keep existing" className="h-8 text-sm" />
           </div>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Destination link (required if the ad has no link)</Label>
+          <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" className="h-8 text-sm" />
         </div>
 
         {error && (

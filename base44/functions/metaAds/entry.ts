@@ -690,7 +690,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'replace_creative') {
-      const { account_id, ad_id, image_base64, image_filename, video_base64, video_filename, headline, message } = body;
+      const { account_id, ad_id, image_base64, image_filename, video_base64, video_filename, headline, message, link } = body;
       if (!account_id || !ad_id) return Response.json({ error: 'account_id and ad_id required' }, { status: 400 });
       if (!image_base64 && !video_base64) return Response.json({ error: 'image_base64 or video_base64 required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
@@ -785,6 +785,7 @@ Deno.serve(async (req) => {
         // link_data.link is required for traffic/link ads. If the original was a
         // video creative (no link_data) the link may live in video_data or the
         // call_to_action value — pull it across so Meta accepts the new creative.
+        if (link) linkData.link = link;
         if (!linkData.link) {
           const ctaLink = (linkData.call_to_action || baseSpec.video_data?.call_to_action)?.value?.link
             || baseSpec.video_data?.link;
