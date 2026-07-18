@@ -359,9 +359,14 @@ export default function ReplaceCreative({ account }) {
           <div className="flex items-start gap-2 text-sm text-emerald-700">
             <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              Replaced the ad's creative with placement-optimized assets ({result.image_count || 0} image(s), {result.video_count || 0} video(s)){result.was_active ? ' — ad resumed' : ''}.
+              {result.fallback
+                ? `Replaced the ad's creative with your first uploaded asset${result.was_active ? ' — ad resumed' : ''}.`
+                : `Replaced the ad's creative with placement-optimized assets (${result.image_count || 0} image(s), ${result.video_count || 0} video(s))${result.was_active ? ' — ad resumed' : ''}.`}
             </span>
           </div>
+        )}
+        {result && result.success && result.note && (
+          <div className="text-xs text-amber-700">{result.note}</div>
         )}
         {result && !result.success && result.results && (
           <div className="text-xs text-destructive space-y-1">

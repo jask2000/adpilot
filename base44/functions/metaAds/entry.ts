@@ -1019,7 +1019,7 @@ Deno.serve(async (req) => {
 
       // One placement-optimized creative: Meta auto-matches each asset to the
       // placement it fits (1:1→Feed, 4:5→Instagram Feed, 9:16→Stories/Reels).
-      const af: any = { optimization_type: 'PLACEMENT' };
+      const af: any = { optimization_type: 'PLACEMENT', ad_formats: ['AUTOMATIC_FORMAT'] };
       if (imageHashes.length) af.images = imageHashes.map((h) => ({ hash: h }));
       if (videoIds.length) af.videos = videoIds.map((v) => ({ video_id: v }));
       af.bodies = [{ text: message || baseSpec.link_data?.message || baseSpec.video_data?.message || '' }];
@@ -1027,16 +1027,56 @@ Deno.serve(async (req) => {
       af.link_urls = [{ website_url: finalLink }];
       af.call_to_action_types = [ctaType];
 
-      const crRes = await fetch(`${GRAPH}/${actId}/adcreatives`, {
+      let crRes = await fetch(`${GRAPH}/${actId}/adcreatives`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: (adData.name || 'Ad') + ' (placement optimized)', page_id, asset_feed_spec: af }),
       });
-      const crData: any = await crRes.json();
+      let crData: any = await crRes.json();
+      let usedFallback = false;
+      let fallbackNote: string | null = null;
+
       if (crData.error) {
-        const e = crData.error;
-        const detail = [e.message, e.error_subcode ? `subcode ${e.error_subcode}` : '', e.error_user_msg, e.error_user_title].filter(Boolean).join(' · ');
-        return Response.json({ error: 'creative: ' + detail }, { status: 502 });
+        // Some Meta apps/accounts lack the asset_feed capability (error #3). Fall
+        // back to a single-asset creative (first image or first video) so the
+        // replace still succeeds, and flag that multi-ratio placement
+        // optimization isn't available for this account.
+        const singleHash = imageHashes[0] || null;
+        const singleVideo = videoIds[0] || null;
+        if (!singleHash && !singleVideo) {
+          const e = crData.error;
+          const detail = [e.message, e.error_subcode ? `subcode ${e.error_subcode}` : '', e.error_user_msg, e.error_user_title].filter(Boolean).join(' · ');
+          return Response.json({ error: 'creative: ' + detail }, { status: 502 });
+        }
+        let fbSpec: any;
+        if (singleHash) {
+          const linkData = baseSpec.link_data ? JSON.parse(JSON.stringify(baseSpec.link_data)) : {};
+          delete linkData.image_url; delete linkData.image_crops; delete linkData.url_tags;
+          linkData.image_hash = singleHash;
+          if (message) linkData.message = message;
+          if (headline) linkData.name = headline;
+          linkData.link = finalLink;
+          if (!linkData.call_to_action) linkData.call_to_action = creativeCta || { type: ctaType, value: { link: finalLink } };
+          fbSpec = { page_id, link_data: linkData };
+        } else {
+          const videoData: any = { video_id: singleVideo };
+          if (message) videoData.message = message;
+          if (headline) videoData.title = headline;
+          fbSpec = { page_id, video_data: videoData };
+        }
+        crRes = await fetch(`${GRAPH}/${actId}/adcreatives`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: (adData.name || 'Ad') + ' (replaced)', object_story_spec: fbSpec }),
+        });
+        crData = await crRes.json();
+        if (crData.error) {
+          const e = crData.error;
+          const detail = [e.message, e.error_subcode ? `subcode ${e.error_subcode}` : '', e.error_user_msg, e.error_user_title].filter(Boolean).join(' · ');
+          return Response.json({ error: 'creative: ' + detail }, { status: 502 });
+        }
+        usedFallback = true;
+        fallbackNote = "Placement-optimized asset feed isn't available for this Meta app — used your first uploaded image/video as a single creative instead.";
       }
 
       // Replace the existing ad's creative (pause/resume if it was active).
@@ -1057,7 +1097,7 @@ Deno.serve(async (req) => {
         await fetch(`${GRAPH}/${ad_id}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'ACTIVE' }) });
       }
 
-      return Response.json({ success: true, ad_id, new_creative_id: crData.id, was_active: wasActive, image_count: imageHashes.length, video_count: videoIds.length, upload_errors: uploadErrors });
+      return Response.json({ success: true, ad_id, new_creative_id: crData.id, was_active: wasActive, image_count: imageHashes.length, video_count: videoIds.length, upload_errors: uploadErrors, fallback: usedFallback, note: fallbackNote });
     }
 
     return Response.json({ error: 'Unknown action' }, { status: 400 });
