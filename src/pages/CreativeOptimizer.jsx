@@ -54,6 +54,16 @@ export default function CreativeOptimizer() {
     }
   };
 
+  const deleteVariant = async (adId) => {
+    setVState(adId, { busy: true, error: null });
+    try {
+      await base44.functions.invoke('metaAds', { action: 'delete_ad', ad_id: adId });
+      setVState(adId, { status: 'DELETED', busy: false, removed: true });
+    } catch (e) {
+      setVState(adId, { busy: false, error: e?.message || 'Delete failed' });
+    }
+  };
+
   // Seed each created variant as PAUSED when a new result arrives.
   useEffect(() => {
     if (!result?.generated?.variants) return;
@@ -382,6 +392,15 @@ export default function CreativeOptimizer() {
                                 ) : (
                                   'Activate'
                                 )}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-xs text-destructive hover:text-destructive"
+                                disabled={st.busy}
+                                onClick={() => deleteVariant(id)}
+                              >
+                                Delete
                               </Button>
                             </div>
                           )}

@@ -52,6 +52,33 @@ Deno.serve(async (req) => {
       return Response.json({ campaigns });
     }
 
+    if (action === 'delete_ad') {
+      const { ad_id } = body;
+      if (!ad_id) return Response.json({ error: 'ad_id required' }, { status: 400 });
+      // Ads that have run can't be hard-deleted; archive first then tolerate a delete failure.
+      let archived = false;
+      try {
+        const ar = await fetch(`${GRAPH}/${ad_id}`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'ARCHIVED' }),
+        });
+        const ad: any = await ar.json();
+        archived = !ad.error;
+      } catch (_e) { /* try delete anyway */ }
+      let errMsg: string | null = null;
+      let deleted = false;
+      try {
+        const r = await fetch(`${GRAPH}/${ad_id}`, { method: 'DELETE', headers });
+        const data: any = await r.json();
+        if (data.error) errMsg = data.error.message;
+        else deleted = true;
+      } catch (e) { errMsg = (e as Error).message; }
+      if (deleted) return Response.json({ success: true, action: 'deleted' });
+      if (archived) return Response.json({ success: true, action: 'archived' });
+      return Response.json({ error: errMsg || 'Delete failed' }, { status: 502 });
+    }
+
     if (action === 'update_ad_status') {
       const { ad_id, status } = body;
       if (!ad_id || !status) return Response.json({ error: 'ad_id and status required' }, { status: 400 });
