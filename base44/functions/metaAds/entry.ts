@@ -1035,18 +1035,19 @@ Deno.serve(async (req) => {
       let crData: any = await crRes.json();
       let usedFallback = false;
       let fallbackNote: string | null = null;
+      let fallbackErr: string | null = null;
 
       if (crData.error) {
         // Some Meta apps/accounts lack the asset_feed capability (error #3). Fall
         // back to a single-asset creative (first image or first video) so the
         // replace still succeeds, and flag that multi-ratio placement
         // optimization isn't available for this account.
+        const afErrDetail = [crData.error.message, crData.error.error_subcode ? `subcode ${crData.error.error_subcode}` : '', crData.error.error_user_msg, crData.error.error_user_title].filter(Boolean).join(' · ');
+        fallbackErr = afErrDetail;
         const singleHash = imageHashes[0] || null;
         const singleVideo = videoIds[0] || null;
         if (!singleHash && !singleVideo) {
-          const e = crData.error;
-          const detail = [e.message, e.error_subcode ? `subcode ${e.error_subcode}` : '', e.error_user_msg, e.error_user_title].filter(Boolean).join(' · ');
-          return Response.json({ error: 'creative: ' + detail }, { status: 502 });
+          return Response.json({ error: 'creative: ' + afErrDetail }, { status: 502 });
         }
         let fbSpec: any;
         if (singleHash) {
@@ -1076,7 +1077,7 @@ Deno.serve(async (req) => {
           return Response.json({ error: 'creative: ' + detail }, { status: 502 });
         }
         usedFallback = true;
-        fallbackNote = "Placement-optimized asset feed isn't available for this Meta app — used your first uploaded image/video as a single creative instead.";
+        fallbackNote = `Placement-optimized asset feed isn't available for this Meta app (${afErrDetail}) — used your first uploaded image/video as a single creative instead.`;
       }
 
       // Replace the existing ad's creative (pause/resume if it was active).
@@ -1097,7 +1098,7 @@ Deno.serve(async (req) => {
         await fetch(`${GRAPH}/${ad_id}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'ACTIVE' }) });
       }
 
-      return Response.json({ success: true, ad_id, new_creative_id: crData.id, was_active: wasActive, image_count: imageHashes.length, video_count: videoIds.length, upload_errors: uploadErrors, fallback: usedFallback, note: fallbackNote });
+      return Response.json({ success: true, ad_id, new_creative_id: crData.id, was_active: wasActive, image_count: imageHashes.length, video_count: videoIds.length, upload_errors: uploadErrors, fallback: usedFallback, note: fallbackNote, asset_feed_error: fallbackErr });
     }
 
     return Response.json({ error: 'Unknown action' }, { status: 400 });

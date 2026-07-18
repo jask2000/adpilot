@@ -368,6 +368,9 @@ export default function ReplaceCreative({ account }) {
         {result && result.success && result.note && (
           <div className="text-xs text-amber-700">{result.note}</div>
         )}
+        {result && result.success && result.asset_feed_error && (
+          <div className="text-xs text-muted-foreground">Asset feed error: {result.asset_feed_error}</div>
+        )}
         {result && !result.success && result.results && (
           <div className="text-xs text-destructive space-y-1">
             {result.results.filter((r) => !r.ok).map((r, i) => (
