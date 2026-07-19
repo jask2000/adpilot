@@ -205,8 +205,13 @@ export default function ReplaceCreative({ account }) {
       setLink('');
       fetchAds();
     } catch (e) {
-      const raw = e?.response?.data?.error || e?.data?.error || e?.response?.data || e?.data || e?.message || 'Request failed';
-      setError(typeof raw === 'string' ? raw : JSON.stringify(raw));
+      let raw = e?.response?.data?.error || e?.data?.error || e?.response?.data || e?.data || e?.message || 'Request failed';
+      if (typeof raw !== 'string') raw = JSON.stringify(raw);
+      if (/<html|<!doctype|<head/i.test(raw)) {
+        setError('The request was too large or timed out before reaching the server. Try fewer or smaller images/videos and retry.');
+      } else {
+        setError(raw.length > 600 ? raw.slice(0, 600) + '…' : raw);
+      }
     } finally {
       setBusy(false);
     }
