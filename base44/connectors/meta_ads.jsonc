@@ -5,6 +5,8 @@
     "ads_read",
     "public_profile",
     "email",
-    "pages_show_list"
+    "pages_show_list",
+    "pages_manage_ads",
+    "read_insights"
   ]
 }
