@@ -994,20 +994,10 @@ Deno.serve(async (req) => {
       if (!list.length) return Response.json({ error: 'assets required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
 
-      // Multi-ratio placement optimization requires asset_feed_spec, which the
-      // shared Meta connector app lacks (#3). Use the app user's connection via
-      // the workspace BYO Meta app (which has the capability) instead.
-      let byoToken: string;
-      try {
-        const byo = await base44.asServiceRole.connectors.getCurrentAppUserConnection(BYO_META_CONNECTOR_ID);
-        byoToken = byo.accessToken;
-      } catch (_e) {
-        return Response.json({ error: 'Connect your Meta account via the custom Meta app to use multi-ratio placement optimization. The shared connector does not support asset_feed_spec.' }, { status: 400 });
-      }
-      const headers = { 'Authorization': `Bearer ${byoToken}` };
-      const accessToken = byoToken;
-
-      // Source ad: status + creative id (to clone link/CTA).
+      // Source ad: status + creative id (to clone link/CTA). Uses the shared
+      // connector token already resolved at the top of the handler. If Meta
+      // rejects asset_feed_spec for this account/app, we fall back below to a
+      // single-asset creative so the replace still succeeds.
       const adRes = await fetch(`${GRAPH}/${ad_id}?fields=id,name,status,creative{id}`, { headers });
       const adData: any = await adRes.json();
       if (adData.error) return Response.json({ error: adData.error.message }, { status: 502 });

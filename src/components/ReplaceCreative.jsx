@@ -24,8 +24,6 @@ import {
   Power,
 } from 'lucide-react';
 
-const BYO_META_CONNECTOR_ID = '6a5c2d983698e0e0426de0b5';
-
 const RATIOS = [
   { value: '1:1', label: '1:1 · Feed', w: 1, h: 1 },
   { value: '4:5', label: '4:5 · Instagram Feed', w: 4, h: 5 },
@@ -63,8 +61,6 @@ const cropToRatio = (dataUrl, rw, rh) =>
 export default function ReplaceCreative({ account }) {
   const [ads, setAds] = useState(null);
   const [adsLoading, setAdsLoading] = useState(false);
-  const [byoConnected, setByoConnected] = useState(null);
-  const [connecting, setConnecting] = useState(false);
   const [adId, setAdId] = useState(null);
   const [images, setImages] = useState([]); // { ratio, name, url }
   const [videos, setVideos] = useState([]); // { name, url }
@@ -94,18 +90,8 @@ export default function ReplaceCreative({ account }) {
     }
   };
 
-  const checkByo = async () => {
-    try {
-      const res = await base44.functions.invoke('metaAds', { action: 'byo_status' });
-      setByoConnected(!!res.data?.connected);
-    } catch (_e) {
-      setByoConnected(false);
-    }
-  };
-
   useEffect(() => {
     fetchAds();
-    checkByo();
   }, [account?.account_id]);
 
   const addImages = async (files, ratioValue) => {
@@ -147,25 +133,6 @@ export default function ReplaceCreative({ account }) {
   };
 
   const removeVideo = (i) => setVideos((prev) => prev.filter((_, idx) => idx !== i));
-
-  const connectByo = async () => {
-    setConnecting(true);
-    setError(null);
-    try {
-      const url = await base44.connectors.connectAppUser(BYO_META_CONNECTOR_ID);
-      const popup = window.open(url, '_blank');
-      const timer = setInterval(() => {
-        if (!popup || popup.closed) {
-          clearInterval(timer);
-          checkByo();
-          setConnecting(false);
-        }
-      }, 500);
-    } catch (e) {
-      setError(e?.message || 'Connect failed');
-      setConnecting(false);
-    }
-  };
 
   const selectedAd = (ads || []).find((a) => a.id === adId);
 
@@ -254,27 +221,6 @@ export default function ReplaceCreative({ account }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {byoConnected === false && (
-          <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
-            <div className="space-y-2">
-              <span className="text-amber-800">
-                Multi-ratio placement optimization needs your own Meta app. Connect your Meta account via the custom Meta app to enable it.
-              </span>
-              <div>
-                <Button size="sm" onClick={connectByo} disabled={connecting} className="h-7 text-xs">
-                  {connecting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
-                  Connect Meta (BYO app)
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-        {byoConnected === true && (
-          <div className="flex items-center gap-2 text-xs text-emerald-700">
-            <CheckCircle2 className="h-4 w-4" /> Custom Meta app connected — placement optimization enabled.
-          </div>
-        )}
         <p className="text-xs text-muted-foreground">
           All uploaded images and videos go into a single placement-optimized
           creative on the selected ad — Meta automatically serves each asset to
