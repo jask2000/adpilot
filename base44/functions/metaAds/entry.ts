@@ -990,7 +990,7 @@ Deno.serve(async (req) => {
     if (action === 'replace_creative_multi') {
       const { account_id, ad_id, assets, headline, message, link } = body;
       if (!account_id || !ad_id) return Response.json({ error: 'account_id and ad_id required' }, { status: 400 });
-      const list: any[] = Array.isArray(assets) ? assets.filter((a) => a && (a.image_base64 || a.video_base64)) : [];
+      const list: any[] = Array.isArray(assets) ? assets.filter((a) => a && (a.image_url || a.video_url || a.image_base64 || a.video_base64)) : [];
       if (!list.length) return Response.json({ error: 'assets required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
 
