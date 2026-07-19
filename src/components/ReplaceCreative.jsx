@@ -205,7 +205,8 @@ export default function ReplaceCreative({ account }) {
       setLink('');
       fetchAds();
     } catch (e) {
-      setError(e?.response?.data?.error || e?.message || 'Request failed');
+      const raw = e?.response?.data?.error || e?.data?.error || e?.response?.data || e?.data || e?.message || 'Request failed';
+      setError(typeof raw === 'string' ? raw : JSON.stringify(raw));
     } finally {
       setBusy(false);
     }
