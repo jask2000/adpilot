@@ -24,7 +24,7 @@ import {
   Power,
 } from 'lucide-react';
 
-const BYO_META_CONNECTOR_ID = '6a5c21bc015c94719b5415f4';
+const BYO_META_CONNECTOR_ID = '6a5c23605097cf4720194ba4';
 
 const RATIOS = [
   { value: '1:1', label: '1:1 · Feed', w: 1, h: 1 },
