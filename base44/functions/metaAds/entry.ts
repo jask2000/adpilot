@@ -1019,11 +1019,7 @@ Deno.serve(async (req) => {
       }
       if (!page_id) return Response.json({ error: 'No Facebook Page connected to your account.' }, { status: 400 });
 
-      const uploadImage = async (dataUrl: string, filename: string): Promise<string | null> => {
-        const b64 = String(dataUrl).split(',').pop() || '';
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const uploadImageBytes = async (bytes: Uint8Array, filename: string): Promise<string | null> => {
         const boundary = 'b44m' + Math.random().toString().slice(2);
         const head =
           `--${boundary}\r\nContent-Disposition: form-data; name="filename"\r\n\r\n${filename}\r\n` +
@@ -1034,11 +1030,7 @@ Deno.serve(async (req) => {
         const d: any = await r.json();
         return d?.images?.[filename]?.hash || null;
       };
-      const uploadVideo = async (dataUrl: string, filename: string): Promise<string | null> => {
-        const b64 = String(dataUrl).split(',').pop() || '';
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const uploadVideoBytes = async (bytes: Uint8Array, filename: string): Promise<string | null> => {
         const boundary = 'b44mv' + Math.random().toString().slice(2);
         const head = `--${boundary}\r\nContent-Disposition: form-data; name="source"; filename="${filename}"\r\nContent-Type: video/mp4\r\n\r\n`;
         const tail = `\r\n--${boundary}--\r\n`;
@@ -1047,19 +1039,31 @@ Deno.serve(async (req) => {
         const d: any = await r.json();
         return d.id || null;
       };
+      const decodeB64 = (dataUrl: string): Uint8Array => {
+        const b64 = String(dataUrl).split(',').pop() || '';
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+      };
 
-      // Upload every asset; collect hashes / video ids.
+      // Upload every asset; collect hashes / video ids. Assets may be provided
+      // as hosted URLs (preferred — keeps the request payload small) or as
+      // inline base64 (legacy). The function fetches any URL server-side and
+      // forwards the bytes to Meta.
       const imageHashes: string[] = [];
       const videoIds: string[] = [];
       const uploadErrors: string[] = [];
       for (let i = 0; i < list.length; i++) {
         const a = list[i];
         try {
-          if (a.image_base64) {
-            const h = await uploadImage(a.image_base64, a.image_filename || `asset_${i + 1}.jpg`);
+          if (a.image_url || a.image_base64) {
+            const bytes = a.image_url ? new Uint8Array(await (await fetch(a.image_url)).arrayBuffer()) : decodeB64(a.image_base64);
+            const h = await uploadImageBytes(bytes, a.image_filename || `asset_${i + 1}.jpg`);
             if (h) imageHashes.push(h); else uploadErrors.push(`asset ${i + 1}: image upload failed`);
-          } else {
-            const v = await uploadVideo(a.video_base64, a.video_filename || `asset_${i + 1}.mp4`);
+          } else if (a.video_url || a.video_base64) {
+            const bytes = a.video_url ? new Uint8Array(await (await fetch(a.video_url)).arrayBuffer()) : decodeB64(a.video_base64);
+            const v = await uploadVideoBytes(bytes, a.video_filename || `asset_${i + 1}.mp4`);
             if (v) videoIds.push(v); else uploadErrors.push(`asset ${i + 1}: video upload failed`);
           }
         } catch (e) { uploadErrors.push(`asset ${i + 1}: ${(e as Error).message}`); }

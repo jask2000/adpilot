@@ -68,6 +68,7 @@ export default function ReplaceCreative({ account }) {
   const [message, setMessage] = useState('');
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
+  const [uploadStep, setUploadStep] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [adAction, setAdAction] = useState(null); // { loading, error }
@@ -175,19 +176,25 @@ export default function ReplaceCreative({ account }) {
       return;
     }
     setBusy(true);
+    setUploadStep('Uploading images…');
     setError(null);
     setResult(null);
     try {
-      const assets = [
-        ...images.map((img, i) => ({
-          image_base64: img.url,
-          image_filename: `img_${i + 1}.jpg`,
-        })),
-        ...videos.map((v, i) => ({
-          video_base64: v.url,
-          video_filename: `vid_${i + 1}.mp4`,
-        })),
-      ];
+      const assets = [];
+      for (let i = 0; i < images.length; i++) {
+        const blob = await (await fetch(images[i].url)).blob();
+        const file = new File([blob], `img_${i + 1}.jpg`, { type: 'image/jpeg' });
+        const { file_url } = await base44.integrations.Core.UploadFile({ file });
+        assets.push({ image_url: file_url, image_filename: `img_${i + 1}.jpg` });
+      }
+      setUploadStep('Uploading videos…');
+      for (let i = 0; i < videos.length; i++) {
+        const blob = await (await fetch(videos[i].url)).blob();
+        const file = new File([blob], `vid_${i + 1}.mp4`, { type: 'video/mp4' });
+        const { file_url } = await base44.integrations.Core.UploadFile({ file });
+        assets.push({ video_url: file_url, video_filename: `vid_${i + 1}.mp4` });
+      }
+      setUploadStep('Replacing creative…');
       const res = await base44.functions.invoke('metaAds', {
         action: 'replace_creative_multi',
         account_id: account.account_id,
@@ -214,6 +221,7 @@ export default function ReplaceCreative({ account }) {
       }
     } finally {
       setBusy(false);
+      setUploadStep(null);
     }
   };
 
@@ -458,7 +466,7 @@ export default function ReplaceCreative({ account }) {
           {busy ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Replacing…
+              {uploadStep || 'Replacing…'}
             </>
           ) : (
             <>
