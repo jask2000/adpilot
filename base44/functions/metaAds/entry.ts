@@ -12,8 +12,8 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { action } = body;
 
-    const { accessToken } = await base44.asServiceRole.connectors.getConnection('meta_ads');
-    const headers = { 'Authorization': `Bearer ${accessToken}` };
+    let { accessToken } = await base44.asServiceRole.connectors.getConnection('meta_ads');
+    let headers = { 'Authorization': `Bearer ${accessToken}` };
 
     if (action === 'byo_status') {
       try {
@@ -993,6 +993,18 @@ Deno.serve(async (req) => {
       const list: any[] = Array.isArray(assets) ? assets.filter((a) => a && (a.image_url || a.video_url || a.image_base64 || a.video_base64)) : [];
       if (!list.length) return Response.json({ error: 'assets required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+
+      // Prefer the builder's own Meta app (BYO app-user connector) for this flow:
+      // the shared platform app lacks the asset_feed_spec capability. If the BYO
+      // connector isn't connected, fall back to the shared token (which hits
+      // error #3 on asset_feed_spec and drops to the single-creative fallback).
+      try {
+        const byo = await base44.asServiceRole.connectors.getCurrentAppUserConnection(BYO_META_CONNECTOR_ID);
+        if (byo?.accessToken) {
+          accessToken = byo.accessToken;
+          headers = { 'Authorization': `Bearer ${accessToken}` };
+        }
+      } catch (_e) { /* BYO not connected — use shared token */ }
 
       // Source ad: status + creative id (to clone link/CTA). Uses the shared
       // connector token already resolved at the top of the handler. If Meta

@@ -58,6 +58,8 @@ const cropToRatio = (dataUrl, rw, rh) =>
     img.src = dataUrl;
   });
 
+const BYO_CONNECTOR_ID = '6a5c2d983698e0e0426de0b5';
+
 export default function ReplaceCreative({ account }) {
   const [ads, setAds] = useState(null);
   const [adsLoading, setAdsLoading] = useState(false);
@@ -72,6 +74,8 @@ export default function ReplaceCreative({ account }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [adAction, setAdAction] = useState(null); // { loading, error }
+  const [byoConnected, setByoConnected] = useState(false);
+  const [byoConnecting, setByoConnecting] = useState(false);
 
   const fetchAds = async () => {
     if (!account) return;
@@ -91,8 +95,37 @@ export default function ReplaceCreative({ account }) {
     }
   };
 
+  const checkByo = async () => {
+    try {
+      const res = await base44.functions.invoke('metaAds', { action: 'byo_status' });
+      setByoConnected(!!res.data?.connected);
+    } catch {
+      setByoConnected(false);
+    }
+  };
+
+  const handleConnectByo = async () => {
+    setByoConnecting(true);
+    setError(null);
+    try {
+      const url = await base44.connectors.connectAppUser(BYO_CONNECTOR_ID);
+      const popup = window.open(url, '_blank');
+      const timer = setInterval(() => {
+        if (!popup || popup.closed) {
+          clearInterval(timer);
+          checkByo();
+          setByoConnecting(false);
+        }
+      }, 500);
+    } catch (e) {
+      setError(e?.message || 'Connect failed');
+      setByoConnecting(false);
+    }
+  };
+
   useEffect(() => {
     fetchAds();
+    checkByo();
   }, [account?.account_id]);
 
   const addImages = async (files, ratioValue) => {
@@ -242,6 +275,29 @@ export default function ReplaceCreative({ account }) {
           Stories/Reels). No extra ads are created; the ad keeps its identity and
           budget. Active ads are briefly paused and resumed.
         </p>
+
+        {byoConnected ? (
+          <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-800 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            Your Meta app is connected — multi-ratio placement optimization is enabled.
+          </div>
+        ) : (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs space-y-2">
+            <div className="flex items-start gap-2 text-amber-800">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                Multi-ratio placement optimization needs your own Meta app
+                connected. Without it, only the first uploaded asset is used.
+                Connect once to enable auto-fit to Feed, Instagram Feed, and
+                Stories/Reels.
+              </span>
+            </div>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleConnectByo} disabled={byoConnecting}>
+              {byoConnecting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <ImagePlus className="h-3 w-3 mr-1" />}
+              Connect your Meta app
+            </Button>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
