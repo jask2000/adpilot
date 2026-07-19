@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.38';
 
 const GRAPH = 'https://graph.facebook.com/v25.0';
-const BYO_META_CONNECTOR_ID = '6a5c23605097cf4720194ba4';
+const BYO_META_CONNECTOR_ID = '6a5c2d983698e0e0426de0b5';
 
 Deno.serve(async (req) => {
   try {
