@@ -107,9 +107,12 @@ export default function ReplaceCreative({ account }) {
   const handleConnectByo = async () => {
     setByoConnecting(true);
     setError(null);
+    // Open the popup synchronously inside the click handler so browsers don't
+    // block it as a pop-up (window.open after an await is treated as indirect).
+    const popup = window.open('about:blank', '_blank');
     try {
       const url = await base44.connectors.connectAppUser(BYO_CONNECTOR_ID);
-      const popup = window.open(url, '_blank');
+      if (popup && url) popup.location.href = url;
       const timer = setInterval(() => {
         if (!popup || popup.closed) {
           clearInterval(timer);
@@ -118,6 +121,7 @@ export default function ReplaceCreative({ account }) {
         }
       }, 500);
     } catch (e) {
+      if (popup) popup.close();
       setError(e?.message || 'Connect failed');
       setByoConnecting(false);
     }
