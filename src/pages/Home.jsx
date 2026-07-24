@@ -8,6 +8,7 @@ import AccountPicker from '@/components/AccountPicker';
 import CampaignRow from '@/components/CampaignRow';
 import PerformanceAnalysis from '@/components/PerformanceAnalysis';
 import SpendCapControl from '@/components/SpendCapControl';
+import AccountInfo from '@/components/AccountInfo';
 
 export default function Home() {
   const [accounts, setAccounts] = useState(null);
@@ -203,6 +204,7 @@ export default function Home() {
             </Card>
           </div>
 
+          <AccountInfo account={accounts.find((a) => a.account_id === accountId)} />
           <SpendCapControl accountId={accountId} />
 
           <Card>
