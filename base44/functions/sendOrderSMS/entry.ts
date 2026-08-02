@@ -18,9 +18,31 @@ export default async function(req) {
     const from = secrets.get('TWILIO_FROM_NUMBER');
     if (!sid || !token || !from) return Response.json({ error: 'Twilio credentials not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER in the app environment variables.' }, { status: 500 });
 
+    const normalizePhone = (p) => {
+      if (!p) return null;
+      let d = String(p).replace(/\D/g, '');
+      if (d.length === 10) d = '1' + d;
+      if (d.length === 11 && d.startsWith('1')) return '+' + d;
+      if (d.length > 11) return '+' + d;
+      return null;
+    };
+    const parseOrderDate = (s) => {
+      if (!s) return null;
+      const str = String(s);
+      const iso = new Date(str);
+      if (!isNaN(iso.getTime())) return iso.toISOString().slice(0, 10);
+      const m = str.match(/[A-Za-z]{3},\s*([A-Za-z]{3})\s+(\d{1,2})\s+(\d{4})/);
+      if (m) {
+        const d = new Date(`${m[1]} ${m[2]} ${m[3]}`);
+        if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+      }
+      return null;
+    };
     const sendSms = async (to, text) => {
+      const dest = normalizePhone(to);
+      if (!dest) throw new Error('Invalid phone number: ' + to);
       const form = new URLSearchParams();
-      form.set('To', to);
+      form.set('To', dest);
       form.set('From', from);
       form.set('Body', text);
       const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
@@ -41,8 +63,8 @@ export default async function(req) {
       const targetDate = date || yesterdayStr();
       const orders = await base44.asServiceRole.entities.ProcessedOrder.list('-created_date', 500);
       const dayOrders = orders.filter((o) => {
-        const od = o.order_date ? String(o.order_date).slice(0, 10) : null;
-        return od === targetDate && o.customer_phone;
+        const od = parseOrderDate(o.order_date);
+        return od === targetDate && normalizePhone(o.customer_phone);
       });
       const already = await base44.asServiceRole.entities.SmsMessage.filter({ campaign_date: targetDate });
       const sentSet = new Set(already.map((s) => s.order_number));
@@ -94,8 +116,8 @@ export default async function(req) {
       const targetDate = yesterdayStr();
       const orders = await base44.asServiceRole.entities.ProcessedOrder.list('-created_date', 500);
       const dayOrders = orders.filter((o) => {
-        const od = o.order_date ? String(o.order_date).slice(0, 10) : null;
-        return od === targetDate && o.customer_phone;
+        const od = parseOrderDate(o.order_date);
+        return od === targetDate && normalizePhone(o.customer_phone);
       });
       const already = await base44.asServiceRole.entities.SmsMessage.filter({ campaign_date: targetDate, source: 'auto' });
       const sentSet = new Set(already.map((s) => s.order_number));
