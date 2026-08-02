@@ -22,13 +22,16 @@ const OBJECTIVES = [
 ];
 
 const CTA_TYPES = [
-  'LEARN_MORE',
+  'ORDER_NOW',
   'SHOP_NOW',
+  'LEARN_MORE',
   'SIGN_UP',
   'SUBSCRIBE',
   'CONTACT_US',
   'BOOK_NOW',
   'DOWNLOAD',
+  'GET_QUOTE',
+  'CALL_NOW',
 ];
 
 export default function CreateAdForm({ account }) {
