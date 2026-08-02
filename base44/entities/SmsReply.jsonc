@@ -1,0 +1,32 @@
+{
+  "name": "SmsReply",
+  "type": "object",
+  "properties": {
+    "from_phone": {
+      "type": "string",
+      "description": "The phone number that sent the reply (E.164)"
+    },
+    "to_phone": {
+      "type": "string",
+      "description": "The Twilio number that received the reply"
+    },
+    "body": {
+      "type": "string"
+    },
+    "message_sid": {
+      "type": "string"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "Matched customer name from recent orders (if any)"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "from_phone",
+    "body"
+  ]
+}

@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { MessageSquare, Send, Loader2, RefreshCw } from 'lucide-react';
+import { MessageSquare, Send, Loader2, RefreshCw, Inbox } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 const DEFAULT_MSG = 'Thanks for your order at HELLCRUST PIZZA! We hope you enjoyed it. See you again soon — order at hellcrustpizza.com';
@@ -24,6 +24,8 @@ export default function CustomerSms() {
   const [sending, setSending] = useState(false);
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [replies, setReplies] = useState([]);
+  const [loadingReplies, setLoadingReplies] = useState(false);
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -50,7 +52,19 @@ export default function CustomerSms() {
     }
   };
 
-  React.useEffect(() => { loadHistory(); }, []);
+  const loadReplies = async () => {
+    setLoadingReplies(true);
+    try {
+      const records = await base44.entities.SmsReply.list('-received_at', 50);
+      setReplies(records || []);
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Failed to load replies', description: e.response?.data?.error || e.message });
+    } finally {
+      setLoadingReplies(false);
+    }
+  };
+
+  React.useEffect(() => { loadHistory(); loadReplies(); }, []);
 
   const toggle = (orderNumber) => {
     const next = new Set(selected);
@@ -201,6 +215,44 @@ export default function CustomerSms() {
                       <td className="p-2 max-w-xs truncate text-muted-foreground">{h.message}</td>
                       <td className="p-2">{h.status === 'sent' ? <Badge>sent</Badge> : <Badge variant="destructive">failed</Badge>}</td>
                       <td className="p-2"><Badge variant="outline">{h.source}</Badge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardTitle className="flex items-center gap-2"><Inbox className="h-4 w-4" /> Customer replies</CardTitle>
+          <Button variant="ghost" size="sm" onClick={loadReplies} disabled={loadingReplies}>
+            {loadingReplies ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Refresh
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {replies.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No replies yet. Once you set the webhook URL in Twilio, inbound messages will appear here.</p>
+          ) : (
+            <div className="rounded-md border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left p-2 font-medium">Received</th>
+                    <th className="text-left p-2 font-medium">From</th>
+                    <th className="text-left p-2 font-medium">Customer</th>
+                    <th className="text-left p-2 font-medium">Message</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {replies.map((r) => (
+                    <tr key={r.id} className="border-t">
+                      <td className="p-2 text-xs text-muted-foreground">{r.received_at ? new Date(r.received_at).toLocaleString() : '—'}</td>
+                      <td className="p-2 text-xs">{r.from_phone}</td>
+                      <td className="p-2">{r.customer_name || '—'}</td>
+                      <td className="p-2 max-w-xs">{r.body}</td>
                     </tr>
                   ))}
                 </tbody>
