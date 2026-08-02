@@ -98,17 +98,13 @@ export default async function(req) {
         try {
           await sendSms(r.customer_phone, message, media_url);
           if (existingRec) {
-            await base44.asServiceRole.entities.SmsMessage.update(existingRec.id, {
-              status: 'sent', error_message: null, message, campaign_date: campaignDate,
-              sent_at: new Date().toISOString(), source: 'manual',
-            });
-          } else {
-            await base44.asServiceRole.entities.SmsMessage.create({
-              order_number: r.order_number, customer_name: r.customer_name, customer_phone: r.customer_phone,
-              store_name: r.store_name, message, campaign_date: campaignDate, status: 'sent',
-              sent_at: new Date().toISOString(), source: 'manual',
-            });
+            await base44.asServiceRole.entities.SmsMessage.delete(existingRec.id);
           }
+          await base44.asServiceRole.entities.SmsMessage.create({
+            order_number: r.order_number, customer_name: r.customer_name, customer_phone: r.customer_phone,
+            store_name: r.store_name, message, campaign_date: campaignDate, status: 'sent',
+            sent_at: new Date().toISOString(), source: 'manual',
+          });
           results.push({ order_number: r.order_number, status: 'sent' });
         } catch (e) {
           if (existingRec) {
