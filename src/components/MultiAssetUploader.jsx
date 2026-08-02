@@ -95,7 +95,9 @@ export default function MultiAssetUploader({ assets, onAssets }) {
       const up = await base44.integrations.Core.UploadFile({ file: fileObj });
       const srcUrl = up.file_url;
 
-      const results = await Promise.all(ASSET_RATIOS.map(async (r) => {
+      const sourceRatio = firstImage.ratio;
+      const targets = ASSET_RATIOS.filter((r) => r.value !== sourceRatio);
+      const results = await Promise.all(targets.map(async (r) => {
         try {
           const res = await base44.functions.invoke('openaiImageGen', {
             sourceUrl: srcUrl,
