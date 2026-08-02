@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Contact, RefreshCw, Loader2, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import CustomerDetailDialog from '@/components/CustomerDetailDialog';
 
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
@@ -15,6 +16,7 @@ export default function Customers() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -123,7 +125,7 @@ export default function Customers() {
                 </thead>
                 <tbody>
                   {filtered.map((c) => (
-                    <tr key={c.id} className="border-t">
+                    <tr key={c.id} className="border-t cursor-pointer hover:bg-muted/40" onClick={() => setSelected(c)}>
                       <td className="p-2 font-medium">{c.name || '—'}</td>
                       <td className="p-2 text-xs">
                         <div>{c.email || '—'}</div>
@@ -142,6 +144,8 @@ export default function Customers() {
           )}
         </CardContent>
       </Card>
+
+      <CustomerDetailDialog customer={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }
