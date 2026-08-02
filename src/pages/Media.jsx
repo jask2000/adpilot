@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Images, Check, Trash2, Upload, ShieldCheck } from 'lucide-react';
+import { Loader2, Images, Check, Trash2, Upload, ShieldCheck, Video, Film } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function Media() {
   const [media, setMedia] = useState([]);
+  const [videos, setVideos] = useState([]);
   const [accountId, setAccountId] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -15,15 +16,19 @@ export default function Media() {
   const [usedHashes, setUsedHashes] = useState(new Set());
   const [delProgress, setDelProgress] = useState(null);
   const fileRef = useRef(null);
+  const videoRef = useRef(null);
 
   const loadMedia = async (actId) => {
-    const [mediaRes, usedRes] = await Promise.all([
+    const [mediaRes, usedRes, vidRes] = await Promise.all([
       base44.functions.invoke('metaAds', { action: 'list_media', account_id: actId }),
       base44.functions.invoke('metaAds', { action: 'list_used_image_hashes', account_id: actId })
         .catch(() => ({ data: { hashes: [] } })),
+      base44.functions.invoke('metaAds', { action: 'list_videos', account_id: actId })
+        .catch(() => ({ data: { videos: [] } })),
     ]);
     setMedia(mediaRes.data?.media || []);
     setUsedHashes(new Set(usedRes.data?.hashes || []));
+    setVideos(vidRes.data?.videos || []);
   };
 
   useEffect(() => {
@@ -103,6 +108,44 @@ export default function Media() {
     }
   };
 
+  const handleVideoUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    setBusy(true);
+    setError(null);
+    try {
+      for (const file of files) {
+        const b64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        await base44.functions.invoke('metaAds', {
+          action: 'upload_video',
+          account_id: accountId,
+          video_base64: b64,
+          video_filename: file.name,
+          title: file.name.replace(/\.[^.]+$/, ''),
+        });
+      }
+      await loadMedia(accountId);
+    } catch (e) {
+      setError(e.message || 'Video upload failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fmtDuration = (secs) => {
+    if (!secs || isNaN(secs)) return '';
+    const s = Math.round(secs);
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${String(r).padStart(2, '0')}`;
+  };
+
   const runDelete = async (hashes) => {
     const res = await base44.functions.invoke('metaAds', { action: 'delete_media', account_id: accountId, hashes });
     const data = res.data || {};
@@ -171,10 +214,16 @@ export default function Media() {
             Upload, delete, and select ad images from your account.
           </p>
         </div>
-        <Button onClick={() => fileRef.current?.click()} disabled={busy || !accountId}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          Upload images
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => fileRef.current?.click()} disabled={busy || !accountId}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Upload images
+          </Button>
+          <Button variant="outline" onClick={() => videoRef.current?.click()} disabled={busy || !accountId}>
+            <Video className="h-4 w-4" />
+            Upload videos
+          </Button>
+        </div>
         <input
           ref={fileRef}
           type="file"
@@ -182,6 +231,14 @@ export default function Media() {
           multiple
           className="hidden"
           onChange={handleUpload}
+        />
+        <input
+          ref={videoRef}
+          type="file"
+          accept="video/*"
+          multiple
+          className="hidden"
+          onChange={handleVideoUpload}
         />
       </div>
 
@@ -304,6 +361,63 @@ export default function Media() {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Film className="h-5 w-5" /> Uploaded videos
+          </CardTitle>
+          <CardDescription>
+            {videos.length} video{videos.length === 1 ? '' : 's'} available
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading videos…
+            </div>
+          ) : videos.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-16 text-center">
+              No uploaded videos found. Click “Upload videos” to add some.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {videos.map((v) => (
+                <div
+                  key={v.id}
+                  className="group relative aspect-video overflow-hidden rounded-lg border bg-muted"
+                >
+                  {v.thumbnail_url ? (
+                    <img
+                      src={v.thumbnail_url}
+                      alt={v.name || v.title || 'ad video'}
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                      <Film className="h-8 w-8" />
+                    </div>
+                  )}
+                  <span className="absolute top-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                    VIDEO
+                  </span>
+                  {v.length != null && (
+                    <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      {fmtDuration(v.length)}
+                    </span>
+                  )}
+                  {(v.name || v.title) && (
+                    <span className="absolute bottom-0 inset-x-0 truncate bg-black/50 px-1.5 py-0.5 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                      {v.name || v.title}
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
