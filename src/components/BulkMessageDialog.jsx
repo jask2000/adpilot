@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Send, Clock, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
-export default function BulkMessageDialog({ recipients, mode, onClose }) {
+export default function BulkMessageDialog({ recipients, mode, onClose, onSent }) {
   const { toast } = useToast();
   const [message, setMessage] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
@@ -48,6 +48,7 @@ export default function BulkMessageDialog({ recipients, mode, onClose }) {
           title: `Scheduled for ${new Date(sendAt).toLocaleString()}`,
           description: `Campaign queued for ${res.data.recipient_count} recipient(s). It will send automatically.`
         });
+        if (typeof onSent === 'function') onSent();
         onClose();
       } else {
         const payload = {
@@ -64,7 +65,7 @@ export default function BulkMessageDialog({ recipients, mode, onClose }) {
           description: failed ? `${failed} failed` : (withoutPhone ? `${withoutPhone} without phone skipped` : 'All delivered'),
           variant: sent ? 'default' : 'destructive'
         });
-        if (sent) onClose();
+        if (sent) { if (typeof onSent === 'function') onSent(); onClose(); }
       }
     } catch (e) {
       toast({ variant: 'destructive', title: 'Send failed', description: e.response?.data?.error || e.message });

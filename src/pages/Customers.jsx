@@ -302,8 +302,8 @@ export default function Customers() {
       </Card>
 
       <CustomerDetailDialog customer={selected} onClose={() => setSelected(null)} />
-      <CustomerSmsDialog customer={smsTarget} onClose={() => setSmsTarget(null)} />
-      <BulkMessageDialog recipients={bulkMode ? bulkRecipients : null} mode={bulkMode} onClose={() => setBulkMode(null)} />
+      <CustomerSmsDialog customer={smsTarget} onClose={() => setSmsTarget(null)} onSent={() => setSelected(null)} />
+      <BulkMessageDialog recipients={bulkMode ? bulkRecipients : null} mode={bulkMode} onClose={() => setBulkMode(null)} onSent={() => setSelectedIds(new Set())} />
     </div>
   );
 }

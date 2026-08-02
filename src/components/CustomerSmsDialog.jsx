@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Send, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
-export default function CustomerSmsDialog({ customer, onClose }) {
+export default function CustomerSmsDialog({ customer, onClose, onSent }) {
   const { toast } = useToast();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -43,7 +43,7 @@ export default function CustomerSmsDialog({ customer, onClose }) {
         description: failed ? `${failed} failed` : 'Delivered to ' + customer.phone,
         variant: sent ? 'default' : 'destructive'
       });
-      if (sent) onClose();
+      if (sent) { if (typeof onSent === 'function') onSent(); onClose(); }
     } catch (e) {
       toast({ variant: 'destructive', title: 'Send failed', description: e.response?.data?.error || e.message });
     } finally {
