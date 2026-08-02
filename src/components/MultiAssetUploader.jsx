@@ -1,28 +1,34 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Upload, Video, X } from 'lucide-react';
+import { Upload, Video, X, Sparkles, Loader2 } from 'lucide-react';
+import { base44 } from '@/api/base44Client';
 import { cropToRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
 
 // Collects multiple images and videos across all common ad ratios.
-// Calls onAssets([{ ratio, kind: 'image'|'video', base64, name }]).
+// Calls onAssets([{ ratio, kind: 'image'|'video', base64?, url?, name }]).
 export default function MultiAssetUploader({ assets, onAssets }) {
   const [busy, setBusy] = useState(false);
+  const [genError, setGenError] = useState(null);
+
+  const firstImage = assets.find((a) => a.kind === 'image');
 
   const addFiles = async (kind, files) => {
     setBusy(true);
     try {
+      const next = [...assets];
       for (const file of files) {
         const r = ASSET_RATIOS.find((x) => x.value === detectRatio(file)) || ASSET_RATIOS[0];
         if (kind === 'image') {
           const dataUrl = await readAsDataUrl(file);
           const cropped = await cropToRatio(dataUrl, r.w, r.h);
-          onAssets([...assets, { ratio: r.value, kind: 'image', base64: cropped, name: file.name }]);
+          next.push({ ratio: r.value, kind: 'image', base64: cropped, name: file.name });
         } else {
           const dataUrl = await readAsDataUrl(file);
-          onAssets([...assets, { ratio: r.value, kind: 'video', base64: dataUrl, name: file.name }]);
+          next.push({ ratio: r.value, kind: 'video', base64: dataUrl, name: file.name });
         }
       }
+      onAssets(next);
     } finally {
       setBusy(false);
     }
@@ -30,13 +36,48 @@ export default function MultiAssetUploader({ assets, onAssets }) {
 
   const remove = (i) => onAssets(assets.filter((_, idx) => idx !== i));
 
+  // AI-generate each ratio from the first uploaded image (recompose, not crop).
+  const generateAllRatios = async () => {
+    if (!firstImage) return;
+    setBusy(true);
+    setGenError(null);
+    try {
+      // 1. Upload the source image so GenerateImage can reference it by URL.
+      const blob = await (await fetch(firstImage.base64)).blob();
+      const fileObj = new File([blob], firstImage.name || 'source.jpg', { type: 'image/jpeg' });
+      const up = await base44.integrations.Core.UploadFile({ file: fileObj });
+      const srcUrl = up.file_url;
+
+      // 2. Generate each ratio with the source as style/content reference.
+      const generated = [];
+      for (const r of ASSET_RATIOS) {
+        const prompt =
+          'Professional food advertising photo re-composed for a ' + r.value + ' (' + r.label + ') aspect ratio. ' +
+          'Keep the same product, plating, and styling as the reference image — do NOT crop; re-frame with ' +
+          (r.h > r.w ? 'vertical negative space for ad copy' : r.value === '1.91:1' ? 'wide horizontal composition with text space' : 'balanced square framing') +
+          '. High-end studio lighting, appetizing, sharp, no people, no text overlay.';
+        const gi = await base44.integrations.Core.GenerateImage({
+          prompt,
+          existing_image_urls: [srcUrl],
+        });
+        generated.push({ ratio: r.value, kind: 'image', url: gi.url, name: 'ai_' + r.value.replace(':', 'x') + '.jpg' });
+      }
+
+      // 3. Replace existing image assets with the generated set (keep any videos).
+      onAssets([...assets.filter((a) => a.kind === 'video'), ...generated]);
+    } catch (e) {
+      setGenError((e && e.message) || 'Generation failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
       <Label>Media — all ratios</Label>
       <p className="text-xs text-muted-foreground">
-        Load images and/or videos; each is tagged with its aspect ratio so Meta
-        delivers it to the matching placement (Feed 1:1, IG Feed 4:5, Reels/Stories 9:16, link ads 1.91:1).
-        Videos keep their native ratio — export the shape you want.
+        Load one image, then let AI re-compose it into every ratio (not a crop) — or manually add
+        images/videos in any ratio. Videos keep their native ratio.
       </p>
       <div className="flex items-center gap-3 flex-wrap">
         <label className="cursor-pointer">
@@ -48,7 +89,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             accept="image/*"
             multiple
             className="hidden"
-            onChange={(e) => addFiles('image', Array.from(e.target.files || []))}
+            onChange={(e) => { addFiles('image', Array.from(e.target.files || [])); e.target.value = ''; }}
           />
         </label>
         <label className="cursor-pointer">
@@ -60,21 +101,36 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             accept="video/mp4,video/*"
             multiple
             className="hidden"
-            onChange={(e) => addFiles('video', Array.from(e.target.files || []))}
+            onChange={(e) => { addFiles('video', Array.from(e.target.files || [])); e.target.value = ''; }}
           />
         </label>
-        {busy && <span className="text-xs text-muted-foreground">Processing…</span>}
+        {firstImage && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-9"
+            disabled={busy}
+            onClick={generateAllRatios}
+          >
+            {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+            {busy ? 'Generating…' : 'Generate all ratios (AI)'}
+          </Button>
+        )}
         {assets.length > 0 && (
           <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => onAssets([])}>
             Clear all
           </Button>
         )}
       </div>
+      {genError && (
+        <p className="text-xs text-destructive">{genError}</p>
+      )}
       <div className="flex flex-wrap gap-3">
         {assets.map((a, i) => (
           <div key={i} className="relative w-24 h-24 rounded-md overflow-hidden border bg-muted">
             {a.kind === 'image' ? (
-              <img src={a.base64} alt={a.name} className="w-full h-full object-cover" />
+              <img src={a.base64 || a.url} alt={a.name} className="w-full h-full object-cover" />
             ) : (
               <video src={a.base64} className="w-full h-full object-cover" muted />
             )}
@@ -105,8 +161,6 @@ function readAsDataUrl(file) {
 }
 
 function detectRatio(file) {
-  // Videos can't be dimension-probed cheaply; default to 9:16, user keeps what they export.
-  if (file.type?.startsWith('video')) return '9:16';
-  // Images: read dimensions on the fly is async; we default ratio by file name hint.
+  if (file.type && file.type.startsWith('video')) return '9:16';
   return '1:1';
 }

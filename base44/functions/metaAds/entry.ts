@@ -240,7 +240,7 @@ Deno.serve(async (req) => {
         if (asData.error) return Response.json({ error: 'adset: ' + asData.error.message, campaign_id }, { status: 502 });
         const adset_id = asData.id;
 
-        // 4. Upload each asset → image_hash or video_id
+        // 4. Upload each asset → image_hash or video_id (supports base64 OR fetched url)
         const uploaded: any[] = [];
         for (const a of (assets || [])) {
           if (a.kind === 'video' && a.base64) {
@@ -262,12 +262,21 @@ Deno.serve(async (req) => {
             const vd: any = await vr.json();
             if (vd.error) return Response.json({ error: 'video: ' + vd.error.message, campaign_id, adset_id }, { status: 502 });
             uploaded.push({ type: 'video_id', id: vd.id });
-          } else if (a.base64) {
-            const b64 = String(a.base64).split(',').pop() || '';
-            const bin = atob(b64);
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-            const fn = a.name || `adimg_${Date.now()}.jpg`;
+          } else if (a.kind === 'image') {
+            let bytes: Uint8Array;
+            let fn = a.name || `adimg_${Date.now()}.jpg`;
+            if (a.url) {
+              const fr = await fetch(a.url);
+              const ab = await fr.arrayBuffer();
+              bytes = new Uint8Array(ab);
+            } else if (a.base64) {
+              const b64 = String(a.base64).split(',').pop() || '';
+              const bin = atob(b64);
+              bytes = new Uint8Array(bin.length);
+              for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            } else {
+              continue;
+            }
             const bnd = 'b44img' + Math.random().toString().slice(2);
             const head = `--${bnd}\r\nContent-Disposition: form-data; name="file"; filename="${fn}"\r\nContent-Type: image/jpeg\r\n\r\n`;
             const tail = `\r\n--${bnd}--\r\n`;
