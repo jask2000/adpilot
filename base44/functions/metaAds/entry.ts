@@ -1001,13 +1001,32 @@ Deno.serve(async (req) => {
       if (!account_id || (!video_base64 && !video_url)) return Response.json({ error: 'account_id and video_base64 or video_url required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
       try {
+        let bytes: Uint8Array;
+        if (video_url) {
+          const fr = await fetch(video_url);
+          if (!fr.ok) return Response.json({ error: 'Could not fetch hosted video (' + fr.status + ')' }, { status: 502 });
+          const ab = await fr.arrayBuffer();
+          bytes = new Uint8Array(ab);
+        } else {
+          const b64 = String(video_base64).split(',').pop() || '';
+          const binary = atob(b64);
+          bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        }
+        if (bytes.byteLength < 1024) return Response.json({ error: `Video file is too small (${bytes.byteLength} bytes)` }, { status: 502 });
+        const filename = video_filename || `upload_${Date.now()}.mp4`;
+        const boundary = 'b44vid' + Math.random().toString().slice(2);
+        const head =
+          `--${boundary}\r\n` +
+          (title ? `Content-Disposition: form-data; name="title"\r\n\r\n${title}\r\n--${boundary}\r\n` : '') +
+          `Content-Disposition: form-data; name="source"; filename="${filename}"\r\n` +
+          `Content-Type: video/mp4\r\n\r\n`;
+        const tail = `\r\n--${boundary}--\r\n`;
+        const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${boundary}` });
         const r = await fetch(`${GRAPH}/${actId}/advideos`, {
           method: 'POST',
-          headers,
-          body: new URLSearchParams({
-            ...(title ? { title } : {}),
-            ...(video_url ? { file_url: video_url } : {}),
-          }),
+          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+          body: blob,
         });
         const data: any = await r.json();
         if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
