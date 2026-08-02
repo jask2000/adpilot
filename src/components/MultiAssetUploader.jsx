@@ -96,7 +96,22 @@ export default function MultiAssetUploader({ assets, onAssets }) {
           prompt,
           existing_image_urls: [srcUrl],
         });
-        generated.push({ ratio: r.value, kind: 'image', url: gi.url, name: 'ai_' + r.value.replace(':', 'x') + '.jpg' });
+        // GenerateImage can't enforce an aspect ratio, so crop the result to
+        // the target ratio — the stored asset then genuinely matches its label.
+        let asset = { ratio: r.value, kind: 'image', url: gi.url, name: 'ai_' + r.value.replace(':', 'x') + '.jpg' };
+        try {
+          const resp = await fetch(gi.url);
+          const blob = await resp.blob();
+          const dataUrl = await new Promise((res, rej) => {
+            const fr = new FileReader();
+            fr.onload = () => res(fr.result);
+            fr.onerror = rej;
+            fr.readAsDataURL(blob);
+          });
+          const cropped = await cropToRatio(dataUrl, r.w, r.h);
+          asset = { ratio: r.value, kind: 'image', base64: cropped, name: 'ai_' + r.value.replace(':', 'x') + '.jpg' };
+        } catch (_e) { /* keep original url if fetch/crop fails */ }
+        generated.push(asset);
       }
 
       // 3. Replace existing image assets with the generated set (keep any videos).
@@ -243,12 +258,12 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             <img
               src={preview.base64 || preview.url}
               alt={preview.name}
-              className="w-full h-auto max-h-[80vh] object-contain rounded-md"
+              className="mx-auto max-w-full max-h-[80vh] w-auto h-auto rounded-md object-contain"
             />
           ) : preview?.kind === 'video' ? (
             <video
               src={preview.base64 || preview.url}
-              className="w-full h-auto max-h-[80vh] object-contain rounded-md"
+              className="mx-auto max-w-full max-h-[80vh] w-auto h-auto rounded-md"
               controls
               autoPlay
             />
