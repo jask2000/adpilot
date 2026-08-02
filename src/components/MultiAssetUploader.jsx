@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Upload, Video, X, Sparkles, Loader2, Film } from 'lucide-react';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { base44 } from '@/api/base44Client';
 import { cropToRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
 
@@ -20,6 +21,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
   const [videoPrompt, setVideoPrompt] = useState('');
   const [videoRatio, setVideoRatio] = useState('9:16');
   const [showVideoGen, setShowVideoGen] = useState(false);
+  const [preview, setPreview] = useState(null);
 
   const firstImage = assets.find((a) => a.kind === 'image');
 
@@ -209,11 +211,16 @@ export default function MultiAssetUploader({ assets, onAssets }) {
       )}
       <div className="flex flex-wrap gap-3">
         {assets.map((a, i) => (
-          <div key={i} className="relative w-24 h-24 rounded-md overflow-hidden border bg-muted">
+          <div
+            key={i}
+            className="relative w-24 h-24 rounded-md overflow-hidden border bg-muted cursor-zoom-in"
+            onDoubleClick={() => setPreview(a)}
+            title="Double-click to view"
+          >
             {a.kind === 'image' ? (
-              <img src={a.base64 || a.url} alt={a.name} className="w-full h-full object-cover" />
+              <img src={a.base64 || a.url} alt={a.name} className="w-full h-full object-cover pointer-events-none" />
             ) : (
-              <video src={a.base64 || a.url} className="w-full h-full object-cover" muted />
+              <video src={a.base64 || a.url} className="w-full h-full object-cover pointer-events-none" muted />
             )}
             <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 text-center">
               {a.ratio}
@@ -228,6 +235,26 @@ export default function MultiAssetUploader({ assets, onAssets }) {
           </div>
         ))}
       </div>
+
+      <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
+        <DialogContent className="max-w-3xl p-2">
+          <DialogTitle className="sr-only">{preview?.name || 'Asset preview'}</DialogTitle>
+          {preview?.kind === 'image' ? (
+            <img
+              src={preview.base64 || preview.url}
+              alt={preview.name}
+              className="w-full h-auto max-h-[80vh] object-contain rounded-md"
+            />
+          ) : preview?.kind === 'video' ? (
+            <video
+              src={preview.base64 || preview.url}
+              className="w-full h-auto max-h-[80vh] object-contain rounded-md"
+              controls
+              autoPlay
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
