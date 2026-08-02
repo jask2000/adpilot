@@ -560,7 +560,7 @@ Deno.serve(async (req) => {
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
       const [cr, sr] = await Promise.all([
         fetch(`${GRAPH}/${actId}/customaudiences?fields=id,name,subtype,approximate_count,description,status,time_updated&limit=200`, { headers }),
-        fetch(`${GRAPH}/${actId}/saved_audiences?fields=id,name,description,status,time_updated&limit=200`, { headers }),
+        fetch(`${GRAPH}/${actId}/saved_audiences?fields=id,name,description,status,time_updated,targeting&limit=200`, { headers }),
       ]);
       const cdata: any = await cr.json();
       if (cdata.error) return Response.json({ error: cdata.error.message }, { status: 502 });
@@ -604,12 +604,13 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'update_audience') {
-      const { audience_id, name, description } = body;
+      const { audience_id, name, description, targeting } = body;
       if (!audience_id) return Response.json({ error: 'audience_id required' }, { status: 400 });
       const updateBody: any = {};
       if (name != null) updateBody.name = name;
       if (description != null) updateBody.description = description;
-      if (!Object.keys(updateBody).length) return Response.json({ error: 'name or description required' }, { status: 400 });
+      if (targeting != null) updateBody.targeting = targeting;
+      if (!Object.keys(updateBody).length) return Response.json({ error: 'name, description, or targeting required' }, { status: 400 });
       const r = await fetch(`${GRAPH}/${audience_id}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },

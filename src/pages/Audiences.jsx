@@ -46,7 +46,7 @@ export default function Audiences() {
   const [ca, setCa] = useState({ name: '', description: '' });
   const [lk, setLk] = useState({ origin: '', country: 'CA', ratio: '0.01' });
   const [editing, setEditing] = useState(null);
-  const [editForm, setEditForm] = useState({ name: '', description: '' });
+  const [editForm, setEditForm] = useState({ name: '', description: '', countries: '', ageMin: '', ageMax: '', gender: 'all' });
 
   useEffect(() => {
     (async () => {
@@ -131,7 +131,17 @@ export default function Audiences() {
 
   const openEdit = (a) => {
     setEditing(a);
-    setEditForm({ name: a.name || '', description: a.description || '' });
+    const t = a.targeting || {};
+    const genders = t.genders || [];
+    const gender = (genders.length === 0 || genders.length === 2) ? 'all' : (genders[0] === 1 ? 'male' : 'female');
+    setEditForm({
+      name: a.name || '',
+      description: a.description || '',
+      countries: ((t.geo_locations && t.geo_locations.countries) || []).join(', '),
+      ageMin: t.age_min != null ? String(t.age_min) : '',
+      ageMax: t.age_max != null ? String(t.age_max) : '',
+      gender,
+    });
   };
 
   const saveEdit = async (e) => {
@@ -140,12 +150,25 @@ export default function Audiences() {
     setBusy(true);
     setMsg(null);
     try {
-      await base44.functions.invoke('metaAds', {
+      const payload = {
         action: 'update_audience',
         audience_id: editing.id,
         name: editForm.name,
         description: editForm.description,
-      });
+      };
+      if (editing.kind === 'saved') {
+        const t = { ...(editing.targeting || {}) };
+        if (editForm.countries.trim()) {
+          t.geo_locations = { ...(t.geo_locations || {}), countries: editForm.countries.split(',').map((s) => s.trim()).filter(Boolean) };
+        }
+        if (editForm.ageMin) t.age_min = parseInt(editForm.ageMin, 10);
+        else delete t.age_min;
+        if (editForm.ageMax) t.age_max = parseInt(editForm.ageMax, 10);
+        else delete t.age_max;
+        t.genders = editForm.gender === 'all' ? [] : [editForm.gender === 'male' ? 1 : 2];
+        payload.targeting = t;
+      }
+      await base44.functions.invoke('metaAds', payload);
       setEditing(null);
       await loadAudiences(account);
       setMsg('Audience updated.');
@@ -324,9 +347,59 @@ export default function Audiences() {
               <Textarea
                 value={editForm.description}
                 onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                rows={3}
+                rows={2}
               />
             </div>
+            {editing?.kind === 'saved' && (
+              <div className="space-y-3 rounded-lg border p-4 bg-muted/30">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Targeting</p>
+                <div className="space-y-1.5">
+                  <Label>Countries (comma-separated codes)</Label>
+                  <Input
+                    value={editForm.countries}
+                    onChange={(e) => setEditForm({ ...editForm, countries: e.target.value })}
+                    placeholder="CA, US"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Min age</Label>
+                    <Input
+                      type="number"
+                      min="13"
+                      max="65"
+                      value={editForm.ageMin}
+                      onChange={(e) => setEditForm({ ...editForm, ageMin: e.target.value })}
+                      placeholder="18"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Max age</Label>
+                    <Input
+                      type="number"
+                      min="13"
+                      max="65"
+                      value={editForm.ageMax}
+                      onChange={(e) => setEditForm({ ...editForm, ageMax: e.target.value })}
+                      placeholder="65"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Gender</Label>
+                  <Select value={editForm.gender} onValueChange={(v) => setEditForm({ ...editForm, gender: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditing(null)} disabled={busy}>
                 Cancel
