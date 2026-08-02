@@ -560,7 +560,7 @@ Deno.serve(async (req) => {
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
       const [cr, sr] = await Promise.all([
         fetch(`${GRAPH}/${actId}/customaudiences?fields=id,name,subtype,approximate_count,description,status,time_updated&limit=200`, { headers }),
-        fetch(`${GRAPH}/${actId}/saved_audiences?fields=id,name,description,status,time_updated,targeting&limit=200`, { headers }),
+        fetch(`${GRAPH}/${actId}/saved_audiences?fields=id,name,description,status,time_updated&limit=200`, { headers }),
       ]);
       const cdata: any = await cr.json();
       if (cdata.error) return Response.json({ error: cdata.error.message }, { status: 502 });
@@ -568,6 +568,15 @@ Deno.serve(async (req) => {
       const custom = (cdata.data || []).map((a: any) => ({ ...a, kind: 'custom' }));
       const saved = ((sdata && sdata.data) || []).map((a: any) => ({ ...a, subtype: 'SAVED', kind: 'saved' }));
       return Response.json({ audiences: [...custom, ...saved] });
+    }
+
+    if (action === 'get_audience') {
+      const { audience_id } = body;
+      if (!audience_id) return Response.json({ error: 'audience_id required' }, { status: 400 });
+      const r = await fetch(`${GRAPH}/${audience_id}?fields=id,name,description,status,subtype,targeting,approximate_count`, { headers });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ audience: data });
     }
 
     if (action === 'create_audience') {

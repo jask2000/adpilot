@@ -31,19 +31,17 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
   const [searchType, setSearchType] = useState('city');
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState([]);
+  const [loadingTargeting, setLoadingTargeting] = useState(false);
+  const [fullAudience, setFullAudience] = useState(null);
   const debounceRef = useRef();
 
-  useEffect(() => {
-    if (!audience) return;
-    setError(null);
-    setResults([]);
-    setSearchQuery('');
-    const t = audience.targeting || {};
+  const applyTargeting = (aud) => {
+    const t = aud.targeting || {};
     const g = t.geo_locations || {};
     const genders = t.genders || [];
     setForm({
-      name: audience.name || '',
-      description: audience.description || '',
+      name: aud.name || '',
+      description: aud.description || '',
       ageMin: t.age_min != null ? String(t.age_min) : '',
       ageMax: t.age_max != null ? String(t.age_max) : '',
       gender: genders.length === 0 || genders.length === 2 ? 'all' : genders[0] === 1 ? 'male' : 'female',
@@ -61,6 +59,43 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
         distance_unit: l.distance_unit || 'mile',
       })),
     });
+  };
+
+  useEffect(() => {
+    if (!audience) return;
+    setError(null);
+    setResults([]);
+    setSearchQuery('');
+    setFullAudience(null);
+    setForm({
+      name: audience.name || '',
+      description: audience.description || '',
+      ageMin: '',
+      ageMax: '',
+      gender: 'all',
+    });
+    setGeo({ countries: [], cities: [], regions: [], zips: [], customLocations: [] });
+    if (audience.kind === 'saved') {
+      (async () => {
+        setLoadingTargeting(true);
+        try {
+          const res = await base44.functions.invoke('metaAds', {
+            action: 'get_audience',
+            audience_id: audience.id,
+          });
+          const aud = res.data.audience;
+          setFullAudience(aud);
+          applyTargeting(aud);
+        } catch (e) {
+          setError(e.message);
+        } finally {
+          setLoadingTargeting(false);
+        }
+      })();
+    } else {
+      applyTargeting(audience);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audience]);
 
   const runSearch = async (q, type) => {
@@ -145,7 +180,7 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
         description: form.description,
       };
       if (audience.kind === 'saved') {
-        const t = { ...(audience.targeting || {}) };
+        const t = { ...((fullAudience || audience).targeting || {}) };
         const gl = { ...(t.geo_locations || {}) };
         if (geo.countries.length) gl.countries = geo.countries; else delete gl.countries;
         if (geo.cities.length) gl.cities = geo.cities.map((c) => ({ key: c.key, name: c.name, radius: c.radius, distance_unit: 'kilometer' })); else delete gl.cities;
@@ -193,7 +228,14 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
 
           {isSaved && (
             <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Location targeting</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Location targeting
+                {loadingTargeting && (
+                  <span className="ml-2 inline-flex items-center gap-1 normal-case text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Loading current targeting…
+                  </span>
+                )}
+              </p>
 
               <div className="space-y-1.5">
                 <Label>Countries</Label>
@@ -376,7 +418,7 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || loadingTargeting}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Save changes
             </Button>
