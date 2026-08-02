@@ -1,0 +1,58 @@
+{
+  "name": "ProcessedOrder",
+  "type": "object",
+  "properties": {
+    "order_number": {
+      "type": "string",
+      "description": "The Order# from the email, used to de-duplicate"
+    },
+    "customer_name": {
+      "type": "string"
+    },
+    "customer_email": {
+      "type": "string"
+    },
+    "customer_phone": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Order total in CAD"
+    },
+    "store_name": {
+      "type": "string"
+    },
+    "order_type": {
+      "type": "string",
+      "description": "Carry-Out or Delivery"
+    },
+    "order_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "gmail_message_id": {
+      "type": "string"
+    },
+    "meta_event_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "sent",
+        "error"
+      ],
+      "default": "sent"
+    },
+    "error_message": {
+      "type": "string"
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "order_number"
+  ]
+}

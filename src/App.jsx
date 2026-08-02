@@ -16,6 +16,7 @@ import CreativeOptimizer from '@/pages/CreativeOptimizer';
 import Media from '@/pages/Media';
 import QuickSales from '@/pages/QuickSales';
 import Locations from '@/pages/Locations';
+import Purchases from '@/pages/Purchases';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -53,6 +54,7 @@ const AuthenticatedApp = () => {
         <Route path="/media" element={<Media />} />
         <Route path="/quick-sales" element={<QuickSales />} />
         <Route path="/locations" element={<Locations />} />
+        <Route path="/purchases" element={<Purchases />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

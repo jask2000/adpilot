@@ -1,0 +1,45 @@
+{
+  "name": "Order Conversions Runner",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "order_conversions_runner",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "send_conversions": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "sendOrderConversions",
+            "args": {}
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Send order conversions to Meta",
+            "description": "Parse inbox orders and report purchases"
+          }
+        }
+      }
+    ]
+  },
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 5,
+      "interval_unit": "minutes",
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "description": "Scans the order inbox every 5 minutes, parses new online order emails, and sends them as Purchase events to the Meta Conversions API so ad attribution runs on real orders."
+}
