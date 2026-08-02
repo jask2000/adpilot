@@ -1,0 +1,45 @@
+{
+  "description": "Backfills historical 'Online Order' emails since May 1, 2026 into ProcessedOrder records and Meta Conversions in small batches every 15 minutes until the backlog is cleared.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 15,
+      "interval_unit": "minutes",
+      "interval_anchor": null,
+      "ends_type": "on_date",
+      "ends_on_date": "2026-08-10T23:59:00Z",
+      "ends_after_count": null
+    }
+  },
+  "name": "Order Backfill Runner",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "order_backfill_runner",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "backfill": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "backfillOrders",
+            "args": {}
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Backfill a batch of historical orders",
+            "description": "Process up to 8 order emails since May 1, 2026"
+          }
+        }
+      }
+    ]
+  }
+}
