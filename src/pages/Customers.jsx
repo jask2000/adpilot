@@ -4,12 +4,25 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Contact, RefreshCw, Loader2, Search, MessageSquare } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Contact, RefreshCw, Loader2, Search, MessageSquare, ArrowUp, ArrowDown } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import CustomerDetailDialog from '@/components/CustomerDetailDialog';
 import CustomerSmsDialog from '@/components/CustomerSmsDialog';
 
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+function Th({ field, sortField, sortDir, onSort, className = '', children }) {
+  const active = sortField === field;
+  return (
+    <th className={`p-2 font-medium cursor-pointer select-none ${className}`} onClick={() => onSort(field)}>
+      <span className={`inline-flex items-center gap-1 ${className.includes('text-right') ? 'justify-end w-full' : ''}`}>
+        {children}
+        {active && (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+      </span>
+    </th>
+  );
+}
 
 export default function Customers() {
   const { toast } = useToast();
@@ -19,6 +32,12 @@ export default function Customers() {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
   const [smsTarget, setSmsTarget] = useState(null);
+  const [sortField, setSortField] = useState('total_spent');
+  const [sortDir, setSortDir] = useState('desc');
+  const [amountOp, setAmountOp] = useState('any');
+  const [amountVal, setAmountVal] = useState('');
+  const [lastOrderOp, setLastOrderOp] = useState('any');
+  const [lastOrderMonths, setLastOrderMonths] = useState('3');
 
   const load = async () => {
     setLoading(true);
@@ -47,14 +66,42 @@ export default function Customers() {
     }
   };
 
-  const filtered = customers.filter((c) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return [c.name, c.email, c.phone, c.last_store].some((v) => String(v || '').toLowerCase().includes(q));
-  });
+  const MONTHS_MS = 30 * 24 * 60 * 60 * 1000;
+
+  const filtered = customers
+    .filter((c) => {
+      const q = query.trim().toLowerCase();
+      if (q && ![c.name, c.email, c.phone, c.last_store].some((v) => String(v || '').toLowerCase().includes(q))) return false;
+      if (amountOp !== 'any' && amountVal !== '') {
+        const amt = Number(c.total_spent) || 0;
+        const threshold = Number(amountVal);
+        if (amountOp === 'gt' && !(amt > threshold)) return false;
+        if (amountOp === 'lt' && !(amt < threshold)) return false;
+      }
+      if (lastOrderOp !== 'any') {
+        const lastTs = c.last_order_date ? new Date(c.last_order_date).getTime() : 0;
+        const monthsAgo = Date.now() - Number(lastOrderMonths || 0) * MONTHS_MS;
+        if (lastOrderOp === 'within' && !(lastTs >= monthsAgo)) return false;
+        if (lastOrderOp === 'older' && !(lastTs < monthsAgo)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      if (sortField === 'name') return (String(a.name || '').localeCompare(String(b.name || ''))) * dir;
+      if (sortField === 'last_order') {
+        return ((new Date(a.last_order_date || 0).getTime()) - (new Date(b.last_order_date || 0).getTime())) * dir;
+      }
+      return ((Number(a.total_spent) || 0) - (Number(b.total_spent) || 0)) * dir;
+    });
 
   const totalRevenue = customers.reduce((s, c) => s + (Number(c.total_spent) || 0), 0);
   const totalOrders = customers.reduce((s, c) => s + (Number(c.total_orders) || 0), 0);
+
+  const toggleSort = (f) => {
+    if (sortField === f) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else { setSortField(f); setSortDir(f === 'name' ? 'asc' : 'desc'); }
+  };
 
   return (
     <div className="p-6 space-y-6 max-w-6xl">
@@ -94,11 +141,62 @@ export default function Customers() {
       </div>
 
       <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle>Customer list</CardTitle>
-          <div className="relative w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, phone…" className="pl-8" />
+        <CardHeader className="space-y-3">
+          <div className="flex items-center justify-between">
+            <CardTitle>Customer list <span className="text-sm font-normal text-muted-foreground">({filtered.length} shown)</span></CardTitle>
+            <div className="relative w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, phone…" className="pl-8" />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Sort by</p>
+              <Select value={sortField} onValueChange={setSortField}>
+                <SelectTrigger className="w-40 h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name (A–Z)</SelectItem>
+                  <SelectItem value="last_order">Last order date</SelectItem>
+                  <SelectItem value="total_spent">Total spent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}>
+              {sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+              {sortDir === 'asc' ? 'Ascending' : 'Descending'}
+            </Button>
+            <div className="flex items-end gap-1.5">
+              <Select value={amountOp} onValueChange={setAmountOp}>
+                <SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any amount</SelectItem>
+                  <SelectItem value="gt">Greater than</SelectItem>
+                  <SelectItem value="lt">Less than</SelectItem>
+                </SelectContent>
+              </Select>
+              {amountOp !== 'any' && (
+                <Input type="number" min="0" value={amountVal} onChange={(e) => setAmountVal(e.target.value)} placeholder="$ amount" className="w-24 h-8" />
+              )}
+            </div>
+            <div className="flex items-end gap-1.5">
+              <Select value={lastOrderOp} onValueChange={setLastOrderOp}>
+                <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any last order</SelectItem>
+                  <SelectItem value="within">Ordered within</SelectItem>
+                  <SelectItem value="older">No order in last</SelectItem>
+                </SelectContent>
+              </Select>
+              {lastOrderOp !== 'any' && (
+                <div className="flex items-center gap-1">
+                  <Input type="number" min="1" value={lastOrderMonths} onChange={(e) => setLastOrderMonths(e.target.value)} className="w-16 h-8" />
+                  <span className="text-xs text-muted-foreground">mo</span>
+                </div>
+              )}
+            </div>
+            {(amountOp !== 'any' || lastOrderOp !== 'any' || query) && (
+              <Button size="sm" variant="ghost" onClick={() => { setAmountOp('any'); setAmountVal(''); setLastOrderOp('any'); setQuery(''); }}>Clear filters</Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -116,13 +214,13 @@ export default function Customers() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="text-left p-2 font-medium">Customer</th>
+                    <Th field="name" sortField={sortField} sortDir={sortDir} onSort={(f) => toggleSort(f)}>Customer</Th>
                     <th className="text-left p-2 font-medium">Contact</th>
                     <th className="text-right p-2 font-medium">Orders</th>
-                    <th className="text-right p-2 font-medium">Total spent</th>
+                    <Th field="total_spent" sortField={sortField} sortDir={sortDir} onSort={(f) => toggleSort(f)} className="text-right">Total spent</Th>
                     <th className="text-right p-2 font-medium">Avg order</th>
                     <th className="text-left p-2 font-medium">Last store</th>
-                    <th className="text-left p-2 font-medium">Last order</th>
+                    <Th field="last_order" sortField={sortField} sortDir={sortDir} onSort={(f) => toggleSort(f)}>Last order</Th>
                     <th className="w-16 p-2"></th>
                   </tr>
                 </thead>
