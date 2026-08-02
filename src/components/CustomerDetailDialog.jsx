@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowUp, ArrowDown } from 'lucide-react';
 
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
@@ -24,6 +24,8 @@ const last10 = (p) => {
 export default function CustomerDetailDialog({ customer, onClose }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [sortField, setSortField] = useState('order_date');
+  const [sortDir, setSortDir] = useState('desc');
 
   useEffect(() => {
     if (!customer) return;
@@ -39,7 +41,6 @@ export default function CustomerDetailDialog({ customer, onClose }) {
           if (pKey && last10(o.customer_phone) === pKey) return true;
           return false;
         });
-        matched.sort((a, b) => new Date(b.order_date || 0).getTime() - new Date(a.order_date || 0).getTime());
         if (active) setOrders(matched);
       } finally {
         if (active) setLoading(false);
@@ -47,6 +48,18 @@ export default function CustomerDetailDialog({ customer, onClose }) {
     })();
     return () => { active = false; };
   }, [customer]);
+
+  const toggleSort = (f) => {
+    if (sortField === f) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else { setSortField(f); setSortDir(f === 'order_date' ? 'desc' : 'asc'); }
+  };
+
+  const sorted = [...orders].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (sortField === 'store_name') return String(a.store_name || '').localeCompare(String(b.store_name || '')) * dir;
+    if (sortField === 'amount') return ((Number(a.amount) || 0) - (Number(b.amount) || 0)) * dir;
+    return (new Date(a.order_date || 0).getTime() - new Date(b.order_date || 0).getTime()) * dir;
+  });
 
   if (!customer) return null;
 
@@ -81,19 +94,21 @@ export default function CustomerDetailDialog({ customer, onClose }) {
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left p-2 font-medium">Order #</th>
-                <th className="text-left p-2 font-medium">Date</th>
-                <th className="text-right p-2 font-medium">Amount</th>
+                <SortTh field="order_date" sortField={sortField} sortDir={sortDir} onSort={toggleSort}>Date</SortTh>
+                <SortTh field="store_name" sortField={sortField} sortDir={sortDir} onSort={toggleSort}>Store</SortTh>
+                <SortTh field="amount" sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="text-right">Amount</SortTh>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={3} className="p-6 text-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground mx-auto" /></td></tr>
-              ) : orders.length === 0 ? (
-                <tr><td colSpan={3} className="p-6 text-center text-muted-foreground">No order history found.</td></tr>
-              ) : orders.map((o) => (
+                <tr><td colSpan={4} className="p-6 text-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground mx-auto" /></td></tr>
+              ) : sorted.length === 0 ? (
+                <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No order history found.</td></tr>
+              ) : sorted.map((o) => (
                 <tr key={o.id} className="border-t">
                   <td className="p-2 font-mono text-xs">{o.order_number}</td>
                   <td className="p-2 text-xs text-muted-foreground">{o.order_date ? new Date(o.order_date).toLocaleString() : '—'}</td>
+                  <td className="p-2 text-xs">{o.store_name || '—'}</td>
                   <td className="p-2 text-right font-medium">{money(o.amount)}</td>
                 </tr>
               ))}
@@ -111,5 +126,17 @@ function Stat({ label, value }) {
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm font-semibold">{value}</p>
     </div>
+  );
+}
+
+function SortTh({ field, sortField, sortDir, onSort, className = '', children }) {
+  const active = sortField === field;
+  return (
+    <th className={`p-2 font-medium cursor-pointer select-none ${className}`} onClick={() => onSort(field)}>
+      <span className={`inline-flex items-center gap-1 ${className.includes('text-right') ? 'justify-end w-full' : ''}`}>
+        {children}
+        {active && (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+      </span>
+    </th>
   );
 }
