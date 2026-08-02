@@ -82,15 +82,21 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             srcUrl = up.file_url;
           }
           if (srcUrl) {
-            const desc = await base44.integrations.Core.InvokeLLM({
-              prompt: 'Describe this food advertising image in vivid, specific detail for generating a short motion video ad. Cover the subject (what food, plating), colors, lighting, steam, melt/texture, background, and any visible branding or text exactly as shown. Output only the description.',
-              file_urls: [srcUrl],
-              response_json_schema: { type: 'object', properties: { description: { type: 'string' } } },
+            // Use Google Veo image-to-video: the actual start image is passed to the model.
+            const res = await base44.functions.invoke('veoImageVideo', {
+              sourceUrl: srcUrl,
+              prompt: prompt + '. Professional food advertising style, appetizing, studio lighting, no people, no text overlay.',
+              ratio: videoRatio,
+              duration: 6,
             });
-            const description = desc?.description || (typeof desc === 'string' ? desc : '');
-            if (description) {
-              prompt = 'STARTING FRAME (recreate this scene at the opening, then animate it): ' + description + '. MOTION: ' + prompt;
-            }
+            const data = res?.data;
+            if (!data?.base64) throw new Error(data?.error || 'Veo returned no video');
+            onAssets([
+              ...assets,
+              { ratio: videoRatio, kind: 'video', base64: data.base64, name: 'veo_img2video_' + videoRatio.replace(':', 'x') + '.mp4' },
+            ]);
+            setVideoPrompt('');
+            return;
           }
         }
       }

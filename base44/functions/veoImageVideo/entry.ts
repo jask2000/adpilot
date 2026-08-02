@@ -75,7 +75,7 @@ export default async function(req) {
     let videoB64 = null;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 8000));
-      const pollResp = await fetch(API_BASE + '/' + opName + '?key=' + apikey(apiKey));
+      const pollResp = await fetch(API_BASE + '/' + opName + '?key=' + apiKey);
       if (!pollResp.ok) {
         const errText = await pollResp.text();
         return Response.json({ error: 'Veo poll failed: ' + errText }, { status: 502 });
@@ -98,8 +98,4 @@ export default async function(req) {
   } catch (error) {
     return Response.json({ error: (error && error.message) || 'Video generation failed' }, { status: 500 });
   }
-}
-
-function apikey(key) {
-  return key;
 }
