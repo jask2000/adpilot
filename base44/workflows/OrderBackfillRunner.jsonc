@@ -1,5 +1,5 @@
 {
-  "description": "Backfills historical 'Online Order' emails since May 1, 2026 into ProcessedOrder records and Meta Conversions in small batches every 15 minutes until the backlog is cleared.",
+  "description": "Backfills historical 'Online Order' emails since May 1, 2026 into ProcessedOrder records and Meta Conversions in small batches every 10 minutes until the backlog is cleared.",
   "trigger": {
     "condition": null,
     "config": {
@@ -9,7 +9,7 @@
       "cron_expression": null,
       "one_time_date": null,
       "timezone": "UTC",
-      "interval_value": 15,
+      "interval_value": 10,
       "interval_unit": "minutes",
       "interval_anchor": null,
       "ends_type": "on_date",
@@ -22,7 +22,7 @@
     "document": {
       "dsl": "1.0.0",
       "name": "order_backfill_runner",
-      "version": "1.0",
+      "version": "1",
       "namespace": "base44"
     },
     "do": [
