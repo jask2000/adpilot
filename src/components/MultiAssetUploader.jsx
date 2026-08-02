@@ -290,20 +290,22 @@ export default function MultiAssetUploader({ assets, onAssets }) {
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
         <DialogContent className="max-w-3xl p-2">
           <DialogTitle className="sr-only">{preview?.name || 'Asset preview'}</DialogTitle>
-          {preview?.kind === 'image' ? (
-            <img
-              src={preview.base64 || preview.url}
-              alt={preview.name}
-              className="justify-self-center mx-auto max-w-full max-h-[80vh] w-auto h-auto rounded-md"
-            />
-          ) : preview?.kind === 'video' ? (
-            <video
-              src={preview.base64 || preview.url}
-              className="justify-self-center mx-auto max-w-full max-h-[80vh] w-auto h-auto rounded-md"
-              controls
-              autoPlay
-            />
-          ) : null}
+          <div className="flex justify-center">
+            {preview?.kind === 'image' ? (
+              <img
+                src={preview.base64 || preview.url}
+                alt={preview.name}
+                className="max-w-full max-h-[80vh] rounded-md"
+              />
+            ) : preview?.kind === 'video' ? (
+              <video
+                src={preview.base64 || preview.url}
+                className="max-w-full max-h-[80vh] rounded-md"
+                controls
+                autoPlay
+              />
+            ) : null}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
