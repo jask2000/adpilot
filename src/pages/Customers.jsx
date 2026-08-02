@@ -4,9 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Contact, RefreshCw, Loader2, Search } from 'lucide-react';
+import { Contact, RefreshCw, Loader2, Search, MessageSquare } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import CustomerDetailDialog from '@/components/CustomerDetailDialog';
+import CustomerSmsDialog from '@/components/CustomerSmsDialog';
 
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
@@ -17,6 +18,7 @@ export default function Customers() {
   const [syncing, setSyncing] = useState(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
+  const [smsTarget, setSmsTarget] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -121,6 +123,7 @@ export default function Customers() {
                     <th className="text-right p-2 font-medium">Avg order</th>
                     <th className="text-left p-2 font-medium">Last store</th>
                     <th className="text-left p-2 font-medium">Last order</th>
+                    <th className="w-16 p-2"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -136,6 +139,12 @@ export default function Customers() {
                       <td className="p-2 text-right text-muted-foreground">{money(c.avg_order_value)}</td>
                       <td className="p-2">{c.last_store || '—'}</td>
                       <td className="p-2 text-xs text-muted-foreground">{c.last_order_date ? new Date(c.last_order_date).toLocaleDateString() : '—'}</td>
+                      <td className="p-2">
+                        <Button size="sm" variant="outline" disabled={!c.phone}
+                          onClick={(e) => { e.stopPropagation(); setSmsTarget(c); }}>
+                          <MessageSquare className="h-3 w-3" />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -146,6 +155,7 @@ export default function Customers() {
       </Card>
 
       <CustomerDetailDialog customer={selected} onClose={() => setSelected(null)} />
+      <CustomerSmsDialog customer={smsTarget} onClose={() => setSmsTarget(null)} />
     </div>
   );
 }
