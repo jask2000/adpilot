@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { base44 } from '@/api/base44Client';
-import { cropToRatio, getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
+import { cropToRatio, fitToRatio, getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
 
 const VIDEO_RATIOS = [
   { value: '9:16', ar: '9:16', label: '9:16 (Stories / Reels)' },
@@ -107,10 +107,17 @@ export default function MultiAssetUploader({ assets, onAssets }) {
           });
           const data = res?.data;
           if (!data?.base64) throw new Error(data?.error || 'No image returned');
-          // Cover-crop the OpenAI output to the exact target ratio so the
-          // asset truly fills the frame with no letterbox bars.
+          // OpenAI can't produce 1.91:1 natively (closest is 1536x1024 = 1.5:1),
+          // so cover-cropping would chop ~21% off top/bottom and zoom into the
+          // center. For that ratio, letterbox with a blurred fill instead so the
+          // full AI composition is preserved. Other ratios have a close-enough
+          // native size, so a gentle cover-crop still fills the frame.
           let b64 = data.base64;
-          try { b64 = await cropToRatio(b64, r.w, r.h); } catch (_e) { /* keep as-is */ }
+          try {
+            b64 = r.value === '1.91:1'
+              ? await fitToRatio(b64, r.w, r.h)
+              : await cropToRatio(b64, r.w, r.h);
+          } catch (_e) { /* keep as-is */ }
           return { ratio: r.value, kind: 'image', base64: b64, name: 'ai_' + r.value.replace(':', 'x') + '.png' };
         } catch (e) {
           return { error: r.value + ': ' + ((e && e.message) || 'failed') };
