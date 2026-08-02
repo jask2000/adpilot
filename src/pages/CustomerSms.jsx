@@ -197,7 +197,7 @@ export default function CustomerSms() {
       });
       const { sent, failed } = res.data;
       const t = toast({ title: sent ? 'Retry sent' : 'Retry failed', description: sent ? 'Message delivered to ' + h.customer_phone : 'Send failed again', variant: sent ? 'default' : 'destructive' });
-      setTimeout(() => t.dismiss(), 4000);
+      setTimeout(() => t.dismiss(), 1200);
       await loadHistory();
     } catch (e) {
       toast({ variant: 'destructive', title: 'Retry failed', description: e.response?.data?.error || e.message });
