@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { base44 } from '@/api/base44Client';
-import { cropToRatio, fitToRatio, getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
+import { getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
 
 const VIDEO_RATIOS = [
   { value: '9:16', ar: '9:16', label: '9:16 (Stories / Reels)' },
@@ -107,18 +107,10 @@ export default function MultiAssetUploader({ assets, onAssets }) {
           });
           const data = res?.data;
           if (!data?.base64) throw new Error(data?.error || 'No image returned');
-          // OpenAI can't produce 1.91:1 natively (closest is 1536x1024 = 1.5:1),
-          // so cover-cropping would chop ~21% off top/bottom and zoom into the
-          // center. For that ratio, letterbox with a blurred fill instead so the
-          // full AI composition is preserved. Other ratios have a close-enough
-          // native size, so a gentle cover-crop still fills the frame.
-          let b64 = data.base64;
-          try {
-            b64 = r.value === '1.91:1'
-              ? await fitToRatio(b64, r.w, r.h)
-              : await cropToRatio(b64, r.w, r.h);
-          } catch (_e) { /* keep as-is */ }
-          return { ratio: r.value, kind: 'image', base64: b64, name: 'ai_' + r.value.replace(':', 'x') + '.png' };
+          // Keep the AI output exactly as OpenAI returns it — no cover-crop,
+          // no letterbox, no re-encoding. The model composes for the target
+          // ratio natively; we never stretch or cut the pixels.
+          return { ratio: r.value, kind: 'image', base64: data.base64, name: 'ai_' + r.value.replace(':', 'x') + '.png' };
         } catch (e) {
           return { error: r.value + ': ' + ((e && e.message) || 'failed') };
         }
@@ -127,7 +119,10 @@ export default function MultiAssetUploader({ assets, onAssets }) {
       const generated = results.filter((x) => x && !x.error);
       const errors = results.filter((x) => x && x.error);
       if (generated.length === 0) throw new Error(errors[0]?.error || 'All ratios failed');
-      onAssets([...assets.filter((a) => a.kind === 'video'), ...generated]);
+      // Keep the user's loaded images/videos untouched; drop only previous
+      // AI-generated ones so re-generating doesn't accumulate duplicates.
+      const kept = assets.filter((a) => a.kind === 'video' || !a.name?.startsWith('ai_'));
+      onAssets([...kept, ...generated]);
       if (errors.length > 0) setGenError(errors.map((e) => e.error).join('; '));
     } catch (e) {
       setGenError((e && e.message) || 'Generation failed');
