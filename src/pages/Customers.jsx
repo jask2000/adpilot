@@ -38,6 +38,7 @@ export default function Customers() {
   const [amountVal, setAmountVal] = useState('');
   const [lastOrderOp, setLastOrderOp] = useState('any');
   const [lastOrderMonths, setLastOrderMonths] = useState('3');
+  const [storeFilter, setStoreFilter] = useState('any');
 
   const load = async () => {
     setLoading(true);
@@ -72,6 +73,10 @@ export default function Customers() {
     .filter((c) => {
       const q = query.trim().toLowerCase();
       if (q && ![c.name, c.email, c.phone, c.last_store].some((v) => String(v || '').toLowerCase().includes(q))) return false;
+      if (storeFilter !== 'any') {
+        const stores = (c.stores || []).map((s) => String(s || '').toLowerCase());
+        if (!stores.includes(storeFilter.toLowerCase())) return false;
+      }
       if (amountOp !== 'any' && amountVal !== '') {
         const amt = Number(c.total_spent) || 0;
         const threshold = Number(amountVal);
@@ -97,6 +102,10 @@ export default function Customers() {
 
   const totalRevenue = customers.reduce((s, c) => s + (Number(c.total_spent) || 0), 0);
   const totalOrders = customers.reduce((s, c) => s + (Number(c.total_orders) || 0), 0);
+  const storeOptions = React.useMemo(
+    () => Array.from(new Set(customers.flatMap((c) => c.stores || []).map((s) => String(s || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [customers]
+  );
 
   const toggleSort = (f) => {
     if (sortField === f) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
@@ -166,6 +175,15 @@ export default function Customers() {
               {sortDir === 'asc' ? 'Ascending' : 'Descending'}
             </Button>
             <div className="flex items-end gap-1.5">
+              <Select value={storeFilter} onValueChange={setStoreFilter}>
+                <SelectTrigger className="w-48 h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">All stores</SelectItem>
+                  {storeOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end gap-1.5">
               <Select value={amountOp} onValueChange={setAmountOp}>
                 <SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -194,8 +212,8 @@ export default function Customers() {
                 </div>
               )}
             </div>
-            {(amountOp !== 'any' || lastOrderOp !== 'any' || query) && (
-              <Button size="sm" variant="ghost" onClick={() => { setAmountOp('any'); setAmountVal(''); setLastOrderOp('any'); setQuery(''); }}>Clear filters</Button>
+            {(amountOp !== 'any' || lastOrderOp !== 'any' || query || storeFilter !== 'any') && (
+              <Button size="sm" variant="ghost" onClick={() => { setAmountOp('any'); setAmountVal(''); setLastOrderOp('any'); setQuery(''); setStoreFilter('any'); }}>Clear filters</Button>
             )}
           </div>
         </CardHeader>
