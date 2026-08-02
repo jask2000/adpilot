@@ -50,9 +50,10 @@ export default async function(req) {
     const size = closestSize(w, h);
     const finalPrompt = (prompt && prompt.trim()) ||
       ('Recompose this food advertising photo into a ' + ratio + ' (' + (label || ratio) +
-        ') aspect ratio. CRITICAL: keep EVERY element from the original — the pizza, the box, the table, the branding, the steam, any props and background — and REARRANGE them into a wider/taller balanced layout so the whole scene still fits. Do NOT zoom in, do NOT crop tightly onto the pizza, do NOT cut anything off, do NOT letterbox. ' +
+        ') aspect ratio. CRITICAL — PRESERVE EXACT COLORS: keep the identical background color, surface, and full color palette/grading of the original. Do NOT change, shift, warm, cool, or recolor the background or any element. ' +
+        'Keep EVERY element from the original — the pizza, the box, the table, the branding, the steam, any props and background — and REARRANGE them into a wider/taller balanced layout so the whole scene still fits. Do NOT zoom in, do NOT crop tightly onto the pizza, do NOT cut anything off, do NOT letterbox. ' +
         'Show a wide establishing shot of the full scene recomposed to fill the new frame naturally with tasteful negative space for ad copy. ' +
-        'Same product, plating, colors, and styling as the reference. High-end studio lighting, appetizing, crisp sharp detail, no people, no extra text overlay.');
+        'Identical product, plating, colors, lighting, and styling as the reference. Crisp sharp detail, no people, no extra text overlay.');
 
     const result = await openai.images.edit({
       model: 'gpt-image-1',
