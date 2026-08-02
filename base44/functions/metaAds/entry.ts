@@ -182,6 +182,154 @@ Deno.serve(async (req) => {
       return Response.json({ error: errMsg || 'Delete failed' }, { status: 502 });
     }
 
+    if (action === 'create_ad_multi') {
+      const {
+        account_id, campaign_name, objective, daily_budget, ad_name,
+        headline, message, link, call_to_action_type, audience_id, audience_kind,
+        assets,
+      } = body;
+      if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
+      const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
+      const accessToken = await base44.asServiceRole.connectors.getConnection('meta_ads');
+      const h = { 'Authorization': `Bearer ${accessToken}` };
+      const GRAPH = 'https://graph.facebook.com/v19.0';
+
+      const objMap: Record<string, string> = {
+        OUTCOME_AWARENESS: 'AWARENESS', OUTCOME_TRAFFIC: 'LINK_CLICKS',
+        OUTCOME_ENGAGEMENT: 'POST_ENGAGEMENT', OUTCOME_SALES: 'CONVERSIONS',
+      };
+      try {
+        // 1. Campaign
+        const campBody = new URLSearchParams();
+        campBody.set('name', campaign_name || 'Multi-ratio Campaign');
+        campBody.set('objective', objMap[objective] || 'LINK_CLICKS');
+        campBody.set('status', 'PAUSED');
+        campBody.set('special_ad_categories', '[]');
+        if (objective === 'OUTCOME_SALES') campBody.set('buying_type', 'AUCTION');
+        const campRes = await fetch(`${GRAPH}/${actId}/campaigns`, { method: 'POST', headers: h, body: campBody });
+        const campData: any = await campRes.json();
+        if (campData.error) return Response.json({ error: 'campaign: ' + campData.error.message }, { status: 502 });
+        const campaign_id = campData.id;
+
+        // 2. Page
+        let pageId = '';
+        try {
+          const pr = await fetch(`${GRAPH}/${actId}?fields=connected_instagram_account,page_id`, { headers: h });
+          const pd: any = await pr.json();
+          pageId = pd.page_id || '';
+        } catch (_e) {}
+        if (!pageId) {
+          try {
+            const pr = await fetch(`${GRAPH}/me/accounts?fields=id,name&limit=5`, { headers: h });
+            const pd: any = await pr.json();
+            pageId = pd.data?.[0]?.id || '';
+          } catch (_e) {}
+        }
+
+        // 3. Ad set
+        const asBody = new URLSearchParams();
+        asBody.set('name', (ad_name || 'Ad Set') + ' — set');
+        asBody.set('campaign_id', campaign_id);
+        asBody.set('billing_event', objective === 'OUTCOME_SALES' ? 'IMPRESSIONS' : 'IMPRESSIONS');
+        asBody.set('optimization_goal', objMap[objective] || 'LINK_CLICKS');
+        asBody.set('daily_budget', String(Math.round(Number(daily_budget || 20) * 100)));
+        asBody.set('status', 'PAUSED');
+        asBody.set('targeting', JSON.stringify({ geo_locations: { countries: ['CA'] }, ...(audience_id ? { custom_audiences: [{ id: audience_id }] } : {}) }));
+        const asRes = await fetch(`${GRAPH}/${actId}/adsets`, { method: 'POST', headers: h, body: asBody });
+        const asData: any = await asRes.json();
+        if (asData.error) return Response.json({ error: 'adset: ' + asData.error.message, campaign_id }, { status: 502 });
+        const adset_id = asData.id;
+
+        // 4. Upload each asset → image_hash or video_id
+        const uploaded: any[] = [];
+        for (const a of (assets || [])) {
+          if (a.kind === 'video' && a.base64) {
+            const b64 = String(a.base64).split(',').pop() || '';
+            const bin = atob(b64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            const fn = a.name || `advideo_${Date.now()}.mp4`;
+            const bnd = 'b44vid' + Math.random().toString().slice(2);
+            const head = `--${bnd}\r\n` + (headline ? `Content-Disposition: form-data; name="title"\r\n\r\n${headline}\r\n--${bnd}\r\n` : '') +
+              `Content-Disposition: form-data; name="source"; filename="${fn}"\r\nContent-Type: video/mp4\r\n\r\n`;
+            const tail = `\r\n--${bnd}--\r\n`;
+            const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${bnd}` });
+            const vr = await fetch(`${GRAPH}/${actId}/advideos`, {
+              method: 'POST',
+              headers: { ...h, 'Content-Type': `multipart/form-data; boundary=${bnd}` },
+              body: blob,
+            });
+            const vd: any = await vr.json();
+            if (vd.error) return Response.json({ error: 'video: ' + vd.error.message, campaign_id, adset_id }, { status: 502 });
+            uploaded.push({ type: 'video_id', id: vd.id });
+          } else if (a.base64) {
+            const b64 = String(a.base64).split(',').pop() || '';
+            const bin = atob(b64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            const fn = a.name || `adimg_${Date.now()}.jpg`;
+            const bnd = 'b44img' + Math.random().toString().slice(2);
+            const head = `--${bnd}\r\nContent-Disposition: form-data; name="file"; filename="${fn}"\r\nContent-Type: image/jpeg\r\n\r\n`;
+            const tail = `\r\n--${bnd}--\r\n`;
+            const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${bnd}` });
+            const ir = await fetch(`${GRAPH}/${actId}/adimages`, {
+              method: 'POST',
+              headers: { ...h, 'Content-Type': `multipart/form-data; boundary=${bnd}` },
+              body: blob,
+            });
+            const idata: any = await ir.json();
+            if (idata.error) return Response.json({ error: 'image: ' + idata.error.message, campaign_id, adset_id }, { status: 502 });
+            uploaded.push({ type: 'image_hash', id: idata.images?.[fn.replace(/\.[^.]+$/, '')]?.hash || idata.image_hash || idata.hash });
+          }
+        }
+        if (!uploaded.length) return Response.json({ error: 'no assets uploaded', campaign_id, adset_id }, { status: 400 });
+
+        // 5. Build asset_feed_spec (placement-optimized single creative)
+        const ctaSpec = call_to_action_type ? { type: call_to_action_type, value: link ? { link } : {} } : undefined;
+        const afBody = new URLSearchParams();
+        afBody.set('name', ad_name || 'Multi-ratio Creative');
+        afBody.set('object_story_spec', JSON.stringify({
+          page_id: pageId,
+          link_data: {
+            message: message || '',
+            ...(link ? { link } : {}),
+            ...(headline ? { name: headline } : {}),
+            ...(ctaSpec ? { call_to_action: ctaSpec } : {}),
+          },
+        }));
+        afBody.set('asset_feed_spec', JSON.stringify({
+          assets: uploaded.map((u) => {
+            const o: any = {};
+            if (u.type === 'image_hash') o.image_hash = u.id;
+            if (u.type === 'video_id') o.video_id = u.id;
+            return o;
+          }),
+          ...(ctaSpec ? { call_to_action_type: ctaSpec.type } : {}),
+        }));
+        afBody.set('degrees_of_freedom_spec', JSON.stringify({
+          creative_features_spec: { enabled_customizations: ['brand_awareness', 'ad_format'] },
+        }));
+        const crRes = await fetch(`${GRAPH}/${actId}/adcreatives`, { method: 'POST', headers: h, body: afBody });
+        const crData: any = await crRes.json();
+        if (crData.error) return Response.json({ error: 'creative: ' + crData.error.message, campaign_id, adset_id }, { status: 502 });
+        const creative_id = crData.id;
+
+        // 6. Ad
+        const adBody = new URLSearchParams();
+        adBody.set('name', ad_name || 'Ad');
+        adBody.set('adset_id', adset_id);
+        adBody.set('creative', JSON.stringify({ creative_id }));
+        adBody.set('status', 'PAUSED');
+        const adRes = await fetch(`${GRAPH}/${actId}/ads`, { method: 'POST', headers: h, body: adBody });
+        const adData: any = await adRes.json();
+        if (adData.error) return Response.json({ error: 'ad: ' + adData.error.message, campaign_id, adset_id }, { status: 502 });
+
+        return Response.json({ campaign_id, adset_id, ad_id: adData.id, creative_id, assets_count: uploaded.length });
+      } catch (e) {
+        return Response.json({ error: (e as Error).message }, { status: 500 });
+      }
+    }
+
     if (action === 'create_ad') {
       const {
         account_id, campaign_name, objective, daily_budget, ad_name,
