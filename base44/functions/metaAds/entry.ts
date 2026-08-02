@@ -1001,12 +1001,17 @@ Deno.serve(async (req) => {
       if (!account_id || (!video_base64 && !video_url)) return Response.json({ error: 'account_id and video_base64 or video_url required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
       try {
+        // Fetch the video bytes (from hosted URL or inline base64), then upload
+        // via multipart source — the shared Meta app supports this (file_url
+        // requires a capability it lacks, error #3).
         let bytes: Uint8Array;
+        let mimeType = 'video/mp4';
         if (video_url) {
           const fr = await fetch(video_url);
           if (!fr.ok) return Response.json({ error: 'Could not fetch hosted video (' + fr.status + ')' }, { status: 502 });
           const ab = await fr.arrayBuffer();
           bytes = new Uint8Array(ab);
+          mimeType = fr.headers.get('content-type') || 'video/mp4';
         } else {
           const b64 = String(video_base64).split(',').pop() || '';
           const binary = atob(b64);
@@ -1020,7 +1025,7 @@ Deno.serve(async (req) => {
           `--${boundary}\r\n` +
           (title ? `Content-Disposition: form-data; name="title"\r\n\r\n${title}\r\n--${boundary}\r\n` : '') +
           `Content-Disposition: form-data; name="source"; filename="${filename}"\r\n` +
-          `Content-Type: video/mp4\r\n\r\n`;
+          `Content-Type: ${mimeType}\r\n\r\n`;
         const tail = `\r\n--${boundary}--\r\n`;
         const blob = new Blob([head, bytes, tail], { type: `multipart/form-data; boundary=${boundary}` });
         const r = await fetch(`${GRAPH}/${actId}/advideos`, {
@@ -1029,7 +1034,11 @@ Deno.serve(async (req) => {
           body: blob,
         });
         const data: any = await r.json();
-        if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+        if (data.error) {
+          const e = data.error;
+          const detail = [e.message, e.error_subcode ? `(subcode ${e.error_subcode})` : '', e.error_user_msg].filter(Boolean).join(' · ');
+          return Response.json({ error: detail }, { status: 502 });
+        }
         return Response.json({ success: true, video_id: data.id });
       } catch (e) {
         return Response.json({ error: 'video upload failed: ' + (e as Error).message }, { status: 502 });
@@ -1040,7 +1049,7 @@ Deno.serve(async (req) => {
       const { account_id } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
-      const r = await fetch(`${GRAPH}/${actId}/advideos?fields=id,name,title,length,thumbnail_url,created_time&limit=200`, { headers });
+      const r = await fetch(`${GRAPH}/${actId}/advideos?fields=id,title,length,thumbnail_url,created_time,permalink_url&limit=200`, { headers });
       const data: any = await r.json();
       if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
       return Response.json({ videos: data.data || [] });
