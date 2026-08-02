@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Bot, Megaphone, PlusCircle, Users, Wand2, Images, Sparkles, MapPin, ShoppingCart, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Bot, Megaphone, PlusCircle, Users, Wand2, Images, Sparkles, MapPin, ShoppingCart, MessageSquare, Contact } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const nav = [
@@ -14,6 +14,7 @@ const nav = [
   { to: '/auto-rules', label: 'Auto Rules', icon: Bot },
   { to: '/purchases', label: 'Purchases', icon: ShoppingCart },
   { to: '/customer-sms', label: 'Customer SMS', icon: MessageSquare },
+  { to: '/customers', label: 'Customers', icon: Contact },
 ];
 
 export default function Layout() {

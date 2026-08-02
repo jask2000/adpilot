@@ -18,6 +18,7 @@ import QuickSales from '@/pages/QuickSales';
 import Locations from '@/pages/Locations';
 import Purchases from '@/pages/Purchases';
 import CustomerSms from '@/pages/CustomerSms';
+import Customers from '@/pages/Customers';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -57,6 +58,7 @@ const AuthenticatedApp = () => {
         <Route path="/locations" element={<Locations />} />
         <Route path="/purchases" element={<Purchases />} />
         <Route path="/customer-sms" element={<CustomerSms />} />
+        <Route path="/customers" element={<Customers />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
