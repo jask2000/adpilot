@@ -14,10 +14,10 @@ import { appendLogoOutro } from '@/lib/videoOutro';
 const LOGO_STORAGE_KEY = 'hellcrust_logo_url';
 
 const VIDEO_RATIOS = [
-  { value: '1:1', ar: '1:1', label: '1:1 (Feed / Square)' },
-  { value: '4:5', ar: '4:5', label: '4:5 (Feed Portrait)' },
-  { value: '9:16', ar: '9:16', label: '9:16 (Stories / Reels)' },
-  { value: '16:9', ar: '16:9', label: '16:9 (Landscape)' },
+  { value: '1:1', ar: '1:1', label: '1:1 (Feed / Square)', note: 'Feed · ≤15s' },
+  { value: '4:5', ar: '4:5', label: '4:5 (Feed Portrait)', note: 'IG Feed · ≤15s' },
+  { value: '9:16', ar: '9:16', label: '9:16 (Stories / Reels)', note: 'Stories ≤15s · Reels ≤90s' },
+  { value: '16:9', ar: '16:9', label: '16:9 (Landscape)', note: 'In-stream ≤15s · Right col ≤15s' },
 ];
 
 // Veo only supports 16:9 and 9:16 for AI generation
@@ -91,7 +91,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
   // One tab per image ratio + one per video ratio.
   const TABS = [
     ...ASSET_RATIOS.map((r) => ({ key: 'img-' + r.value, ratio: r.value, kind: 'image', label: r.value + ' image' })),
-    ...VIDEO_RATIOS.map((r) => ({ key: 'vid-' + r.value, ratio: r.value, kind: 'video', label: r.value + ' video' })),
+    ...VIDEO_RATIOS.map((r) => ({ key: 'vid-' + r.value, ratio: r.value, kind: 'video', label: r.value + ' video · ' + r.note })),
   ];
 
   const firstImage = assets.find((a) => a.kind === 'image');
@@ -411,7 +411,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
               <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {VEO_RATIOS.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  <SelectItem key={r.value} value={r.value}>{r.label} · {r.note}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
