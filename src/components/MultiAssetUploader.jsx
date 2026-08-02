@@ -235,9 +235,9 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             title="Double-click to view"
           >
             {a.kind === 'image' ? (
-              <img src={a.base64 || a.url} alt={a.name} className="w-full h-full object-cover pointer-events-none" />
+              <img src={a.base64 || a.url} alt={a.name} className="w-full h-full object-contain pointer-events-none" />
             ) : (
-              <video src={a.base64 || a.url} className="w-full h-full object-cover pointer-events-none" muted />
+              <video src={a.base64 || a.url} className="w-full h-full object-contain pointer-events-none" muted />
             )}
             <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 text-center">
               {a.ratio}
