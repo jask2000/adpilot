@@ -88,23 +88,41 @@ export default async function(req) {
       if (!Array.isArray(recipients) || !recipients.length) return Response.json({ error: 'recipients required' }, { status: 400 });
       if (!message) return Response.json({ error: 'message required' }, { status: 400 });
       const campaignDate = date || yesterdayStr();
+      const existing = await base44.asServiceRole.entities.SmsMessage.filter({ campaign_date: campaignDate });
+      const existingMap = {};
+      for (const e of existing) existingMap[e.order_number] = e;
       const results = [];
       for (const r of recipients) {
         if (!r.customer_phone) { results.push({ order_number: r.order_number, status: 'failed', error: 'no phone' }); continue; }
+        const existingRec = existingMap[r.order_number];
         try {
           await sendSms(r.customer_phone, message, media_url);
-          await base44.asServiceRole.entities.SmsMessage.create({
-            order_number: r.order_number, customer_name: r.customer_name, customer_phone: r.customer_phone,
-            store_name: r.store_name, message, campaign_date: campaignDate, status: 'sent',
-            sent_at: new Date().toISOString(), source: 'manual',
-          });
+          if (existingRec) {
+            await base44.asServiceRole.entities.SmsMessage.update(existingRec.id, {
+              status: 'sent', error_message: null, message, campaign_date: campaignDate,
+              sent_at: new Date().toISOString(), source: 'manual',
+            });
+          } else {
+            await base44.asServiceRole.entities.SmsMessage.create({
+              order_number: r.order_number, customer_name: r.customer_name, customer_phone: r.customer_phone,
+              store_name: r.store_name, message, campaign_date: campaignDate, status: 'sent',
+              sent_at: new Date().toISOString(), source: 'manual',
+            });
+          }
           results.push({ order_number: r.order_number, status: 'sent' });
         } catch (e) {
-          await base44.asServiceRole.entities.SmsMessage.create({
-            order_number: r.order_number, customer_name: r.customer_name, customer_phone: r.customer_phone,
-            store_name: r.store_name, message, campaign_date: campaignDate, status: 'failed',
-            error_message: e.message, sent_at: new Date().toISOString(), source: 'manual',
-          });
+          if (existingRec) {
+            await base44.asServiceRole.entities.SmsMessage.update(existingRec.id, {
+              status: 'failed', error_message: e.message, message, campaign_date: campaignDate,
+              sent_at: new Date().toISOString(), source: 'manual',
+            });
+          } else {
+            await base44.asServiceRole.entities.SmsMessage.create({
+              order_number: r.order_number, customer_name: r.customer_name, customer_phone: r.customer_phone,
+              store_name: r.store_name, message, campaign_date: campaignDate, status: 'failed',
+              error_message: e.message, sent_at: new Date().toISOString(), source: 'manual',
+            });
+          }
           results.push({ order_number: r.order_number, status: 'failed', error: e.message });
         }
       }
