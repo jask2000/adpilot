@@ -288,7 +288,10 @@ export default function MultiAssetUploader({ assets, onAssets }) {
       </Tabs>
 
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
-        <DialogContent className="max-w-3xl p-2">
+        <DialogContent
+          className="max-w-3xl"
+          style={{ background: 'transparent', border: 'none', boxShadow: 'none', padding: 0 }}
+        >
           <DialogTitle className="sr-only">{preview?.name || 'Asset preview'}</DialogTitle>
           <div className="flex justify-center">
             {preview?.kind === 'image' ? (
