@@ -1,0 +1,66 @@
+{
+  "name": "ScheduledSms",
+  "type": "object",
+  "properties": {
+    "message": {
+      "type": "string",
+      "description": "The SMS/MMS body to send"
+    },
+    "media_url": {
+      "type": "string",
+      "description": "Optional publicly accessible image URL for MMS"
+    },
+    "send_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the campaign should be dispatched (ISO 8601)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "sent",
+        "cancelled"
+      ],
+      "default": "pending"
+    },
+    "recipients": {
+      "type": "array",
+      "description": "List of recipient payloads ({order_number, customer_name, customer_phone, store_name})",
+      "items": {
+        "type": "object",
+        "properties": {
+          "order_number": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "customer_phone": {
+            "type": "string"
+          },
+          "store_name": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sent_count": {
+      "type": "number",
+      "default": 0
+    },
+    "failed_count": {
+      "type": "number",
+      "default": 0
+    },
+    "processed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "message",
+    "send_at",
+    "recipients"
+  ]
+}

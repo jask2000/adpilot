@@ -147,6 +147,87 @@ export default async function(req) {
       return Response.json({ date: targetDate, sent, failed, total: toSend.length });
     }
 
+    if (action === 'schedule') {
+      if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      const { recipients, message, media_url, send_at } = body;
+      if (!Array.isArray(recipients) || !recipients.length) return Response.json({ error: 'recipients required' }, { status: 400 });
+      if (!message) return Response.json({ error: 'message required' }, { status: 400 });
+      if (!send_at) return Response.json({ error: 'send_at required' }, { status: 400 });
+      const when = new Date(send_at);
+      if (isNaN(when.getTime())) return Response.json({ error: 'invalid send_at' }, { status: 400 });
+      const valid = recipients.filter((r) => r.customer_phone);
+      if (!valid.length) return Response.json({ error: 'no recipients with a phone number' }, { status: 400 });
+      const created = await base44.asServiceRole.entities.ScheduledSms.create({
+        message,
+        media_url: media_url || null,
+        send_at: when.toISOString(),
+        status: 'pending',
+        recipients: valid.map((r) => ({
+          order_number: r.order_number,
+          customer_name: r.customer_name,
+          customer_phone: r.customer_phone,
+          store_name: r.store_name || '',
+        })),
+      });
+      return Response.json({ id: created.id, scheduled_for: when.toISOString(), recipient_count: valid.length });
+    }
+
+    if (action === 'processDue') {
+      // Invoked by the ScheduledSmsRunner workflow (no user session).
+      // Finds pending campaigns whose send_at is in the past and dispatches them.
+      const now = new Date();
+      const pending = await base44.asServiceRole.entities.ScheduledSms.filter({ status: 'pending' }, 'send_at', 50);
+      const due = pending.filter((c) => {
+        const d = c.send_at ? new Date(c.send_at) : null;
+        return d && !isNaN(d.getTime()) && d.getTime() <= now.getTime();
+      });
+      let campaigns = 0, totalSent = 0, totalFailed = 0;
+      for (const camp of due) {
+        let sent = 0, failed = 0;
+        for (const r of (camp.recipients || [])) {
+          try {
+            await sendSms(r.customer_phone, camp.message, camp.media_url || undefined);
+            await base44.asServiceRole.entities.SmsMessage.create({
+              order_number: r.order_number || `SCH-${camp.id}`,
+              customer_name: r.customer_name, customer_phone: r.customer_phone,
+              store_name: r.store_name, message: camp.message,
+              campaign_date: now.toISOString().slice(0, 10),
+              status: 'sent', sent_at: now.toISOString(), source: 'manual',
+            });
+            sent++;
+          } catch (e) {
+            await base44.asServiceRole.entities.SmsMessage.create({
+              order_number: r.order_number || `SCH-${camp.id}`,
+              customer_name: r.customer_name, customer_phone: r.customer_phone,
+              store_name: r.store_name, message: camp.message,
+              campaign_date: now.toISOString().slice(0, 10),
+              status: 'failed', error_message: e.message, sent_at: now.toISOString(), source: 'manual',
+            });
+            failed++;
+          }
+        }
+        await base44.asServiceRole.entities.ScheduledSms.update(camp.id, {
+          status: 'sent', sent_count: sent, failed_count: failed, processed_at: now.toISOString(),
+        });
+        campaigns++; totalSent += sent; totalFailed += failed;
+      }
+      return Response.json({ processed: campaigns, sent: totalSent, failed: totalFailed });
+    }
+
+    if (action === 'cancelScheduled') {
+      if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      const { id } = body;
+      if (!id) return Response.json({ error: 'id required' }, { status: 400 });
+      await base44.asServiceRole.entities.ScheduledSms.update(id, { status: 'cancelled' });
+      return Response.json({ id, status: 'cancelled' });
+    }
+
+    if (action === 'listScheduled') {
+      if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      const records = await base44.asServiceRole.entities.ScheduledSms.list('-send_at', 50);
+      return Response.json({ scheduled: records });
+    }
+
     if (action === 'history') {
       if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
       const { limit } = body;

@@ -1,0 +1,47 @@
+{
+  "description": "Processes scheduled SMS/MMS campaigns whose send_at time has arrived, dispatching them via Twilio every 5 minutes.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 5,
+      "interval_unit": "minutes",
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "name": "Scheduled SMS Runner",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "scheduled_sms_runner",
+      "version": "1",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "process_due": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "sendOrderSMS",
+            "args": {
+              "action": "processDue"
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Dispatch due scheduled SMS campaigns",
+            "description": "Sends all pending campaigns past their send_at time"
+          }
+        }
+      }
+    ]
+  }
+}
