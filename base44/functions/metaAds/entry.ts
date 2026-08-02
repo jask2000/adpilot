@@ -621,6 +621,21 @@ Deno.serve(async (req) => {
       return Response.json({ success: true });
     }
 
+    if (action === 'search_locations') {
+      const { q, location_type } = body;
+      if (!q) return Response.json({ results: [] });
+      const params = new URLSearchParams({
+        type: 'adgeolocation',
+        location_type: location_type || 'city',
+        q,
+        limit: '20',
+      });
+      const r = await fetch(`${GRAPH}/search?${params}`, { headers });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ results: data.data || [] });
+    }
+
     if (action === 'list_ads') {
       const { account_id } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
