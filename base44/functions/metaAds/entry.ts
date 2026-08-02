@@ -1055,6 +1055,15 @@ Deno.serve(async (req) => {
       return Response.json({ videos: data.data || [] });
     }
 
+    if (action === 'delete_video') {
+      const { video_id } = body;
+      if (!video_id) return Response.json({ error: 'video_id required' }, { status: 400 });
+      const r = await fetch(`${GRAPH}/${video_id}`, { method: 'DELETE', headers });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ success: true });
+    }
+
     if (action === 'replace_creative') {
       const { account_id, ad_id, image_base64, image_filename, video_base64, video_filename, headline, message, link } = body;
       if (!account_id || !ad_id) return Response.json({ error: 'account_id and ad_id required' }, { status: 400 });

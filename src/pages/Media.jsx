@@ -14,6 +14,7 @@ export default function Media() {
   const [busyType, setBusyType] = useState(null); // 'image' | 'video' | null
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(new Set());
+  const [selectedVideos, setSelectedVideos] = useState(new Set());
   const [usedHashes, setUsedHashes] = useState(new Set());
   const [delProgress, setDelProgress] = useState(null);
   const fileRef = useRef(null);
@@ -30,6 +31,7 @@ export default function Media() {
     setMedia(mediaRes.data?.media || []);
     setUsedHashes(new Set(usedRes.data?.hashes || []));
     setVideos(vidRes.data?.videos || []);
+    setSelectedVideos(new Set());
   };
 
   useEffect(() => {
@@ -79,6 +81,51 @@ export default function Media() {
   const selectAll = () => setSelected(new Set(media.filter((m) => !isUsed(m.hash)).map((m) => m.hash)));
   const selectUnused = () => setSelected(new Set(media.filter((m) => !isUsed(m.hash)).map((m) => m.hash)));
   const clear = () => setSelected(new Set());
+
+  const toggleVideo = (id) =>
+    setSelectedVideos((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const selectAllVideos = () => setSelectedVideos(new Set(videos.map((v) => v.id)));
+  const clearVideos = () => setSelectedVideos(new Set());
+
+  const handleDeleteVideo = async (v) => {
+    if (!confirm(`Delete video "${v.title || v.id}"?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await base44.functions.invoke('metaAds', { action: 'delete_video', account_id: accountId, video_id: v.id });
+      setSelectedVideos((prev) => { const n = new Set(prev); n.delete(v.id); return n; });
+      await loadMedia(accountId);
+    } catch (e) {
+      setError(e.message || 'Video delete failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeleteSelectedVideos = async () => {
+    const count = selectedVideos.size;
+    if (!count) return;
+    if (!confirm(`Delete ${count} selected video${count > 1 ? 's' : ''}?`)) return;
+    setBusy(true);
+    setError(null);
+    const ids = Array.from(selectedVideos);
+    try {
+      for (const id of ids) {
+        await base44.functions.invoke('metaAds', { action: 'delete_video', account_id: accountId, video_id: id });
+      }
+      setSelectedVideos(new Set());
+      await loadMedia(accountId);
+    } catch (e) {
+      setError(e.message || 'Video delete failed');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleUpload = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -370,13 +417,34 @@ export default function Media() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Film className="h-5 w-5" /> Uploaded videos
-          </CardTitle>
-          <CardDescription>
-            {videos.length} video{videos.length === 1 ? '' : 's'} available
-          </CardDescription>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Film className="h-5 w-5" /> Uploaded videos
+            </CardTitle>
+            <CardDescription>
+              {selectedVideos.size > 0
+                ? `${selectedVideos.size} of ${videos.length} selected`
+                : `${videos.length} video${videos.length === 1 ? '' : 's'} available`}
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={selectAllVideos} disabled={!videos.length}>
+              Select all
+            </Button>
+            <Button variant="outline" size="sm" onClick={clearVideos} disabled={!selectedVideos.size}>
+              Clear
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteSelectedVideos}
+              disabled={!selectedVideos.size || busy}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete selected ({selectedVideos.size})
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -389,38 +457,69 @@ export default function Media() {
             </p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {videos.map((v) => (
-                <div
-                  key={v.id}
-                  className="group relative aspect-video overflow-hidden rounded-lg border bg-muted"
-                >
-                  {v.thumbnail_url ? (
-                    <img
-                      src={v.thumbnail_url}
-                      alt={v.name || v.title || 'ad video'}
-                      loading="lazy"
-                      className="h-full w-full object-cover"
+              {videos.map((v) => {
+                const isSel = selectedVideos.has(v.id);
+                return (
+                  <div
+                    key={v.id}
+                    className={cn(
+                      'group relative aspect-video overflow-hidden rounded-lg border bg-muted',
+                      isSel ? 'ring-2 ring-primary border-primary' : 'border-border'
+                    )}
+                  >
+                    {v.thumbnail_url ? (
+                      <img
+                        src={v.thumbnail_url}
+                        alt={v.title || 'ad video'}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                        <Film className="h-8 w-8" />
+                      </div>
+                    )}
+                    <span className="absolute top-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      VIDEO
+                    </span>
+                    {v.length != null && (
+                      <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                        {fmtDuration(v.length)}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleVideo(v.id)}
+                      className="absolute inset-0"
+                      title="Select"
                     />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                      <Film className="h-8 w-8" />
-                    </div>
-                  )}
-                  <span className="absolute top-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                    VIDEO
-                  </span>
-                  {v.length != null && (
-                    <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                      {fmtDuration(v.length)}
+                    <span
+                      className={cn(
+                        'absolute top-1.5 left-1.5 flex h-6 w-6 items-center justify-center rounded-md border-2 transition-colors z-10',
+                        isSel
+                          ? 'bg-primary border-primary text-primary-foreground'
+                          : 'bg-black/30 border-white/70 text-transparent group-hover:border-white'
+                      )}
+                    >
+                      <Check className="h-4 w-4" />
                     </span>
-                  )}
-                  {(v.name || v.title) && (
-                    <span className="absolute bottom-0 inset-x-0 truncate bg-black/50 px-1.5 py-0.5 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                      {v.name || v.title}
-                    </span>
-                  )}
-                </div>
-              ))}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteVideo(v)}
+                      disabled={busy}
+                      title="Delete video"
+                      className="absolute top-1.5 right-1.5 z-10 flex h-7 w-7 items-center justify-center rounded-md bg-black/40 text-white hover:bg-destructive disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                    {v.title && (
+                      <span className="absolute bottom-0 inset-x-0 truncate bg-black/50 px-1.5 py-0.5 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                        {v.title}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
