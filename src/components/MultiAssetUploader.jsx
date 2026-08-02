@@ -14,9 +14,14 @@ import { appendLogoOutro } from '@/lib/videoOutro';
 const LOGO_STORAGE_KEY = 'hellcrust_logo_url';
 
 const VIDEO_RATIOS = [
+  { value: '1:1', ar: '1:1', label: '1:1 (Feed / Square)' },
+  { value: '4:5', ar: '4:5', label: '4:5 (Feed Portrait)' },
   { value: '9:16', ar: '9:16', label: '9:16 (Stories / Reels)' },
   { value: '16:9', ar: '16:9', label: '16:9 (Landscape)' },
 ];
+
+// Veo only supports 16:9 and 9:16 for AI generation
+const VEO_RATIOS = VIDEO_RATIOS.filter((r) => r.value === '9:16' || r.value === '16:9');
 
 // Collects multiple images and videos across all common ad ratios.
 // Calls onAssets([{ ratio, kind: 'image'|'video', base64?, url?, name }]).
@@ -106,7 +111,8 @@ export default function MultiAssetUploader({ assets, onAssets }) {
           next.push({ ratio: ratioVal, kind: 'image', base64: dataUrl, name: file.name });
         } else {
           const dataUrl = await readAsDataUrl(file);
-          next.push({ ratio: '9:16', kind: 'video', base64: dataUrl, name: file.name });
+          const ratioVal = await getVideoRatio(dataUrl);
+          next.push({ ratio: ratioVal, kind: 'video', base64: dataUrl, name: file.name });
         }
       }
       onAssets(next);
@@ -404,7 +410,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             <Select value={videoRatio} onValueChange={setVideoRatio}>
               <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {VIDEO_RATIOS.map((r) => (
+                {VEO_RATIOS.map((r) => (
                   <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                 ))}
               </SelectContent>
@@ -551,6 +557,25 @@ function readAsDataUrl(file) {
     r.onload = () => resolve(r.result);
     r.onerror = reject;
     r.readAsDataURL(file);
+  });
+}
+
+function getVideoRatio(dataUrl) {
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.onloadedmetadata = () => {
+      const ar = v.videoWidth / v.videoHeight;
+      let best = VIDEO_RATIOS[0];
+      let bestDiff = Infinity;
+      for (const r of VIDEO_RATIOS) {
+        const [rw, rh] = r.value.split(':').map(Number);
+        const diff = Math.abs(ar - rw / rh);
+        if (diff < bestDiff) { bestDiff = diff; best = r; }
+      }
+      resolve(best.value);
+    };
+    v.onerror = () => resolve('9:16');
+    v.src = dataUrl;
   });
 }
 
