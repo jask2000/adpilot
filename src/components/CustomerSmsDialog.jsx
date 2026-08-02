@@ -12,7 +12,10 @@ export default function CustomerSmsDialog({ customer, onClose }) {
   const [sending, setSending] = useState(false);
 
   const open = () => {
-    setMessage(`Hi${customer?.name ? ` ${customer.name}` : ''}, `);
+    const firstName = (customer?.name || '').split(' ')[0];
+    setMessage(
+      `Hi${firstName ? ` ${firstName}` : ''}, thank you for your order at HELLCRUST PIZZA! We'd love your feedback — reply with a star rating from 1 to 5 and add any comments. Thank you!`
+    );
   };
 
   React.useEffect(() => { if (customer) open(); }, [customer]);
