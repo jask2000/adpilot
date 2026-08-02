@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Upload, Video, X, Sparkles, Loader2, Film } from 'lucide-react';
+import { Upload, Video, X, Sparkles, Loader2, Film, ImagePlus } from 'lucide-react';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import { base44 } from '@/api/base44Client';
 import { getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
 
@@ -24,6 +25,8 @@ export default function MultiAssetUploader({ assets, onAssets }) {
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [preview, setPreview] = useState(null);
   const [tab, setTab] = useState('img-1:1');
+  const [useStartImage, setUseStartImage] = useState(false);
+  const [startImageIdx, setStartImageIdx] = useState('');
 
   // One tab per image ratio + one per video ratio.
   const TABS = [
@@ -32,6 +35,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
   ];
 
   const firstImage = assets.find((a) => a.kind === 'image');
+  const imageAssets = assets.map((a, i) => ({ a, i })).filter(({ a }) => a.kind === 'image');
 
   const addFiles = async (kind, files) => {
     setBusy(true);
@@ -58,14 +62,40 @@ export default function MultiAssetUploader({ assets, onAssets }) {
 
   const remove = (i) => onAssets(assets.filter((_, idx) => idx !== i));
 
-  // AI-generate a video from a text prompt (Veo). Adds one 6s video asset.
+  // AI-generate a video from a text prompt (Veo), optionally seeded by an
+  // existing image. Since the video model is text-to-video, we describe the
+  // chosen image with an LLM and fold that description into the motion prompt.
   const generateVideo = async () => {
     if (!videoPrompt.trim()) return;
     setBusy(true);
     setGenError(null);
     try {
+      let prompt = videoPrompt.trim();
+      if (useStartImage) {
+        const imgAsset = imageAssets[parseInt(startImageIdx, 10)];
+        if (imgAsset) {
+          let srcUrl = imgAsset.url;
+          if (!srcUrl && imgAsset.base64) {
+            const blob = await (await fetch(imgAsset.base64)).blob();
+            const fileObj = new File([blob], imgAsset.name || 'start.jpg', { type: 'image/jpeg' });
+            const up = await base44.integrations.Core.UploadFile({ file: fileObj });
+            srcUrl = up.file_url;
+          }
+          if (srcUrl) {
+            const desc = await base44.integrations.Core.InvokeLLM({
+              prompt: 'Describe this food advertising image in vivid, specific detail for generating a short motion video ad. Cover the subject (what food, plating), colors, lighting, steam, melt/texture, background, and any visible branding or text exactly as shown. Output only the description.',
+              file_urls: [srcUrl],
+              response_json_schema: { type: 'object', properties: { description: { type: 'string' } } },
+            });
+            const description = desc?.description || (typeof desc === 'string' ? desc : '');
+            if (description) {
+              prompt = 'STARTING FRAME (recreate this scene at the opening, then animate it): ' + description + '. MOTION: ' + prompt;
+            }
+          }
+        }
+      }
       const vr = await base44.integrations.Core.GenerateVideo({
-        prompt: videoPrompt.trim() +
+        prompt: prompt +
           '. Professional food advertising style, appetizing, studio lighting, no people, no text overlay.',
         duration: 6,
         aspect_ratio: videoRatio,
@@ -201,6 +231,25 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             rows={2}
             className="text-sm"
           />
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="flex items-center gap-2 text-xs">
+              <Checkbox
+                checked={useStartImage}
+                onCheckedChange={(v) => { setUseStartImage(!!v); if (v && startImageIdx === '' && imageAssets.length) setStartImageIdx(String(imageAssets[0].i)); }}
+              />
+              <span className="flex items-center gap-1"><ImagePlus className="h-3.5 w-3.5" /> Start from an existing image</span>
+            </label>
+            {useStartImage && (
+              <Select value={startImageIdx} onValueChange={setStartImageIdx}>
+                <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Pick a source image" /></SelectTrigger>
+                <SelectContent>
+                  {imageAssets.map(({ a, i }) => (
+                    <SelectItem key={i} value={String(i)}>{a.name || ('image-' + i)} · {a.ratio}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <Select value={videoRatio} onValueChange={setVideoRatio}>
               <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
@@ -214,7 +263,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
               type="button"
               size="sm"
               className="h-9"
-              disabled={busy || !videoPrompt.trim()}
+              disabled={busy || !videoPrompt.trim() || (useStartImage && !startImageIdx)}
               onClick={generateVideo}
             >
               {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
