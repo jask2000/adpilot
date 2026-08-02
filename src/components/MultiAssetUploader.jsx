@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { base44 } from '@/api/base44Client';
-import { fitToRatio, getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
+import { getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
 
 const VIDEO_RATIOS = [
   { value: '9:16', ar: '9:16', label: '9:16 (Stories / Reels)' },
@@ -82,25 +82,44 @@ export default function MultiAssetUploader({ assets, onAssets }) {
     }
   };
 
-  // Re-fit the first uploaded image into every ad ratio client-side. The full
-  // image is preserved (contain, never zoomed/cropped); the extra space is
-  // filled with a blurred extension of the same photo — like outpainting but
-  // instant, free, and lossless for the original pixels.
+  // AI-recompose the first uploaded image into every ad ratio via OpenAI
+  // gpt-image-1 (the model behind ChatGPT's image gen): keeps ALL elements and
+  // rearranges them into a sharp new frame for each aspect ratio.
   const generateAllRatios = async () => {
     if (!firstImage) return;
     setBusy(true);
     setGenError(null);
     try {
-      const generated = await Promise.all(ASSET_RATIOS.map(async (r) => {
-        const b64 = await fitToRatio(firstImage.base64, r.w, r.h);
-        return { ratio: r.value, kind: 'image', base64: b64, name: 'fit_' + r.value.replace(':', 'x') + '.jpg' };
+      const blob = await (await fetch(firstImage.base64)).blob();
+      const fileObj = new File([blob], firstImage.name || 'source.jpg', { type: 'image/jpeg' });
+      const up = await base44.integrations.Core.UploadFile({ file: fileObj });
+      const srcUrl = up.file_url;
+
+      const results = await Promise.all(ASSET_RATIOS.map(async (r) => {
+        try {
+          const res = await base44.functions.invoke('openaiImageGen', {
+            sourceUrl: srcUrl,
+            ratio: r.value,
+            w: r.w,
+            h: r.h,
+            label: r.label,
+          });
+          const data = res?.data;
+          if (!data?.base64) throw new Error(data?.error || 'No image returned');
+          return { ratio: r.value, kind: 'image', base64: data.base64, name: 'ai_' + r.value.replace(':', 'x') + '.png' };
+        } catch (e) {
+          return { error: r.value + ': ' + ((e && e.message) || 'failed') };
+        }
       }));
-      // Keep the user's loaded images/videos untouched; drop only previous
-      // fit_ versions so re-generating doesn't accumulate duplicates.
-      const kept = assets.filter((a) => a.kind === 'video' || (!a.name?.startsWith('fit_') && !a.name?.startsWith('ai_')));
+
+      const generated = results.filter((x) => x && !x.error);
+      const errors = results.filter((x) => x && x.error);
+      if (generated.length === 0) throw new Error(errors[0]?.error || 'All ratios failed');
+      const kept = assets.filter((a) => a.kind === 'video' || !a.name?.startsWith('ai_'));
       onAssets([...kept, ...generated]);
+      if (errors.length > 0) setGenError(errors.map((e) => e.error).join('; '));
     } catch (e) {
-      setGenError((e && e.message) || 'Fit failed');
+      setGenError((e && e.message) || 'Generation failed');
     } finally {
       setBusy(false);
     }
@@ -148,7 +167,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             onClick={generateAllRatios}
           >
             {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-            {busy ? 'Fitting…' : 'Fit image to all ratios'}
+            {busy ? 'Recomposing…' : 'Recompose to all ratios (ChatGPT)'}
           </Button>
         )}
         {assets.length > 0 && (
