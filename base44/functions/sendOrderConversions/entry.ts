@@ -99,7 +99,7 @@ export default async function(req) {
     }
 
     // Find unread order confirmation emails.
-    const listRes = await fetch(`${GMAIL_API}/messages?q=${encodeURIComponent('subject:Online Order is:unread')}&maxResults=25`, { headers: authHeader });
+    const listRes = await fetch(`${GMAIL_API}/messages?q=${encodeURIComponent('subject:Online Order is:unread')}&maxResults=100`, { headers: authHeader });
     const listData = await listRes.json();
     const messageIds = listData.messages || [];
 
