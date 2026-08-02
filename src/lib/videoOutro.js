@@ -53,27 +53,33 @@ export async function appendLogoOutro(videoSrc, logoUrl, ratio, outroSec = 2.5) 
   canvas.height = dims.h;
   const ctx = canvas.getContext('2d');
 
-  // Capture the canvas video stream at 30fps, then merge in the source
-  // video's audio track so the composited output keeps the original audio.
+  // Capture the canvas video stream at 30fps.
   const canvasStream = canvas.captureStream(30);
-  let recordingStream = canvasStream;
+
+  // Route the video's audio through Web Audio API into a
+  // MediaStreamDestination so we can merge it into the recording.
+  // Not connecting to audioCtx.destination keeps local playback silent.
+  let audioTracksForRecording = [];
+  let audioCtx = null;
   try {
-    const vStream = video.captureStream
-      ? video.captureStream()
-      : video.mozCaptureStream
-        ? video.mozCaptureStream()
-        : null;
-    if (vStream) {
-      const audioTracks = vStream.getAudioTracks();
-      if (audioTracks.length) {
-        recordingStream = new MediaStream([
-          ...canvasStream.getVideoTracks(),
-          ...audioTracks,
-        ]);
-      }
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx) {
+      audioCtx = new AudioCtx();
+      const srcNode = audioCtx.createMediaElementSource(video);
+      const destNode = audioCtx.createMediaStreamDestination();
+      srcNode.connect(destNode);
+      audioTracksForRecording = destNode.stream.getAudioTracks();
     }
   } catch (_) {
-    // Audio capture not supported — fall back to video-only stream
+    // Web Audio not available — record video-only
+  }
+
+  let recordingStream = canvasStream;
+  if (audioTracksForRecording.length) {
+    recordingStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...audioTracksForRecording,
+    ]);
   }
 
   const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
@@ -96,6 +102,14 @@ export async function appendLogoOutro(videoSrc, logoUrl, ratio, outroSec = 2.5) 
 
   video.currentTime = 0;
   await video.play();
+  // Unmute so Web Audio can tap the audio track — the audio is routed
+  // through the MediaStreamDestination (not speakers) so compositing stays
+  // silent. play() succeeded while muted, so unmute is allowed without a
+  // user gesture.
+  video.muted = false;
+  if (audioCtx && audioCtx.state === 'suspended') {
+    try { await audioCtx.resume(); } catch (_) {}
+  }
   drawVideo();
 
   await new Promise((resolve) => { video.onended = resolve; });
@@ -129,6 +143,7 @@ export async function appendLogoOutro(videoSrc, logoUrl, ratio, outroSec = 2.5) 
   cancelAnimationFrame(rafId);
 
   if (objectUrl) URL.revokeObjectURL(objectUrl);
+  if (audioCtx) audioCtx.close().catch(() => {});
 
   const blob = new Blob(chunks, { type: 'video/webm' });
   return blobToBase64(blob);
