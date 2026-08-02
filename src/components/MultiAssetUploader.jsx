@@ -30,8 +30,8 @@ export default function MultiAssetUploader({ assets, onAssets }) {
   const [tab, setTab] = useState('img-1:1');
   const [useStartImage, setUseStartImage] = useState(false);
   const [startImageIdx, setStartImageIdx] = useState('');
-  const [doGuidance, setDoGuidance] = useState('');
-  const [dontGuidance, setDontGuidance] = useState('');
+  const [chatTargetIdx, setChatTargetIdx] = useState(null);
+  const [chatPrompt, setChatPrompt] = useState('');
   const [logoUrl, setLogoUrl] = useState(() => {
     try { return localStorage.getItem(LOGO_STORAGE_KEY) || ''; } catch (_) { return ''; }
   });
@@ -188,10 +188,6 @@ export default function MultiAssetUploader({ assets, onAssets }) {
         setGenError('All ratios already have images — nothing to generate.');
         return;
       }
-      const guidanceParts = [];
-      if (doGuidance.trim()) guidanceParts.push('DO: ' + doGuidance.trim());
-      if (dontGuidance.trim()) guidanceParts.push('DO NOT: ' + dontGuidance.trim());
-      const guidancePrompt = guidanceParts.join('. ') + (guidanceParts.length ? '.' : '');
       const results = await Promise.all(targets.map(async (r) => {
         try {
           const res = await base44.functions.invoke('openaiImageGen', {
@@ -200,7 +196,6 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             w: r.w,
             h: r.h,
             label: r.label,
-            prompt: guidancePrompt,
           });
           const data = res?.data;
           if (!data?.base64) throw new Error(data?.error || 'No image returned');
@@ -217,6 +212,52 @@ export default function MultiAssetUploader({ assets, onAssets }) {
       if (errors.length > 0) setGenError(errors.map((e) => e.error).join('; '));
     } catch (e) {
       setGenError((e && e.message) || 'Generation failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Regenerate a single image for a specific ratio using a chat instruction.
+  // Uses the original source image (firstImage) and the user's text guidance.
+  const regenerateImage = async () => {
+    if (chatTargetIdx === null || !chatPrompt.trim()) return;
+    const target = assets[chatTargetIdx];
+    if (!target || target.kind !== 'image') return;
+    const source = firstImage || target;
+    setBusy(true);
+    setGenError(null);
+    try {
+      let srcUrl = source.url;
+      if (!srcUrl && source.base64) {
+        const blob = await (await fetch(source.base64)).blob();
+        const fileObj = new File([blob], source.name || 'source.jpg', { type: 'image/jpeg' });
+        const up = await base44.integrations.Core.UploadFile({ file: fileObj });
+        srcUrl = up.file_url;
+      }
+      if (!srcUrl) throw new Error('No source image available');
+      const ratioDef = ASSET_RATIOS.find((r) => r.value === target.ratio);
+      const res = await base44.functions.invoke('openaiImageGen', {
+        sourceUrl: srcUrl,
+        ratio: target.ratio,
+        w: ratioDef?.w,
+        h: ratioDef?.h,
+        label: ratioDef?.label,
+        prompt: chatPrompt.trim(),
+      });
+      const data = res?.data;
+      if (!data?.base64) throw new Error(data?.error || 'No image returned');
+      const next = [...assets];
+      next[chatTargetIdx] = {
+        ratio: target.ratio,
+        kind: 'image',
+        base64: data.base64,
+        name: 'ai_fix_' + target.ratio.replace(':', 'x') + '.png',
+      };
+      onAssets(next);
+      setChatTargetIdx(null);
+      setChatPrompt('');
+    } catch (e) {
+      setGenError((e && e.message) || 'Regeneration failed');
     } finally {
       setBusy(false);
     }
@@ -255,42 +296,17 @@ export default function MultiAssetUploader({ assets, onAssets }) {
           />
         </label>
         {firstImage && (
-          <div className="flex flex-col gap-2 w-full max-w-xl border-t border-border/60 pt-3 mt-1">
-            <p className="text-xs font-medium text-muted-foreground">Guide the AI (optional)</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1">
-                <Label className="text-xs text-muted-foreground">Do</Label>
-                <Textarea
-                  placeholder="e.g. add steam, keep brand visible, bright lighting"
-                  value={doGuidance}
-                  onChange={(e) => setDoGuidance(e.target.value)}
-                  rows={2}
-                  className="text-sm"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label className="text-xs text-muted-foreground">Don't</Label>
-                <Textarea
-                  placeholder="e.g. no people, no extra text, no zoom in"
-                  value={dontGuidance}
-                  onChange={(e) => setDontGuidance(e.target.value)}
-                  rows={2}
-                  className="text-sm"
-                />
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-9 w-fit"
-              disabled={busy}
-              onClick={generateAllRatios}
-            >
-              {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-              {busy ? 'Recomposing…' : 'Generate missing ratios (ChatGPT)'}
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-9"
+            disabled={busy}
+            onClick={generateAllRatios}
+          >
+            {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+            {busy ? 'Recomposing…' : 'Generate missing ratios (ChatGPT)'}
+          </Button>
         )}
         {assets.length > 0 && (
           <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => onAssets([])}>
@@ -452,6 +468,16 @@ export default function MultiAssetUploader({ assets, onAssets }) {
                       >
                         <X className="h-3 w-3" />
                       </button>
+                      {a.kind === 'image' && (
+                        <button
+                          type="button"
+                          onClick={() => { setChatTargetIdx(i); setChatPrompt(''); }}
+                          className="absolute top-1 left-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-primary"
+                          title="Fix with AI"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -482,6 +508,31 @@ export default function MultiAssetUploader({ assets, onAssets }) {
                 autoPlay
               />
             ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={chatTargetIdx !== null} onOpenChange={(o) => { if (!o) { setChatTargetIdx(null); setChatPrompt(''); } }}>
+        <DialogContent className="max-w-md">
+          <DialogTitle>Fix image with AI{chatTargetIdx !== null && assets[chatTargetIdx] ? ' · ' + assets[chatTargetIdx].ratio : ''}</DialogTitle>
+          <p className="text-xs text-muted-foreground">
+            Tell the AI what to change for this image. It uses the original source photo and your instructions to regenerate it.
+          </p>
+          <Textarea
+            placeholder="e.g. make the pizza more centered, brighten the lighting, add more steam"
+            value={chatPrompt}
+            onChange={(e) => setChatPrompt(e.target.value)}
+            rows={3}
+            className="text-sm"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => { setChatTargetIdx(null); setChatPrompt(''); }}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={busy || !chatPrompt.trim()} onClick={regenerateImage}>
+              {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+              {busy ? 'Regenerating…' : 'Regenerate'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
