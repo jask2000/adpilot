@@ -83,14 +83,14 @@ export default async function(req: Request) {
 
     console.log('veoImageVideo: operation started, name=' + (operation as any).name + ', done=' + (operation as any).done);
 
-    // Poll the long-running operation (up to ~150s).
-    const deadline = Date.now() + 150000;
+    // Poll the long-running operation (up to ~90s, checking every 5s).
+    const deadline = Date.now() + 90000;
     while (!operation.done && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 10000));
+      await new Promise((r) => setTimeout(r, 5000));
       operation = await ai.operations.getVideosOperation({ operation } as any);
     }
 
-    if (!operation.done) return Response.json({ error: 'Veo generation timed out' }, { status: 504 });
+    if (!operation.done) return Response.json({ error: 'Veo generation is taking longer than 90 seconds — please try again. Veo clips normally take 30-60 seconds; retry if it still fails.' }, { status: 504 });
 
     if ((operation as any).error) {
       console.error('veoImageVideo: operation error:', JSON.stringify((operation as any).error));
