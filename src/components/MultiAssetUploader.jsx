@@ -82,50 +82,46 @@ export default function MultiAssetUploader({ assets, onAssets }) {
     }
   };
 
-  // AI-generate each ratio from the first uploaded image (recompose, not crop).
+  // AI-generate each ratio from the first uploaded image using OpenAI gpt-image-1
+  // (the model behind ChatGPT's image gen) for true per-ratio re-composition.
   const generateAllRatios = async () => {
     if (!firstImage) return;
     setBusy(true);
     setGenError(null);
     try {
-      // 1. Upload the source image so GenerateImage can reference it by URL.
+      // 1. Upload the source image once so the backend can fetch it.
       const blob = await (await fetch(firstImage.base64)).blob();
       const fileObj = new File([blob], firstImage.name || 'source.jpg', { type: 'image/jpeg' });
       const up = await base44.integrations.Core.UploadFile({ file: fileObj });
       const srcUrl = up.file_url;
 
-      // 2. Generate each ratio with the source as style/content reference.
-      const generated = [];
-      for (const r of ASSET_RATIOS) {
-        const prompt =
-          'Professional food advertising photo re-composed for a ' + r.value + ' (' + r.label + ') aspect ratio. ' +
-          'Keep the same product, plating, and styling as the reference image — do NOT crop; re-frame with ' +
-          (r.h > r.w ? 'vertical negative space for ad copy' : r.value === '1.91:1' ? 'wide horizontal composition with text space' : 'balanced square framing') +
-          '. High-end studio lighting, appetizing, sharp, no people, no text overlay.';
-        const gi = await base44.integrations.Core.GenerateImage({
-          prompt,
-          existing_image_urls: [srcUrl],
-        });
-        // Cover-crop the AI output to the target ratio so it fills the frame
-        // with no letterbox bars; the AI already re-composed for this ratio.
-        let asset = { ratio: r.value, kind: 'image', url: gi.url, name: 'ai_' + r.value.replace(':', 'x') + '.jpg' };
+      // 2. Generate each ratio in parallel via the OpenAI backend function.
+      const results = await Promise.all(ASSET_RATIOS.map(async (r) => {
         try {
-          const resp = await fetch(gi.url);
-          const blob = await resp.blob();
-          const dataUrl = await new Promise((res, rej) => {
-            const fr = new FileReader();
-            fr.onload = () => res(fr.result);
-            fr.onerror = rej;
-            fr.readAsDataURL(blob);
+          const res = await base44.functions.invoke('openaiImageGen', {
+            sourceUrl: srcUrl,
+            ratio: r.value,
+            w: r.w,
+            h: r.h,
+            label: r.label,
           });
-          const cropped = await cropToRatio(dataUrl, r.w, r.h);
-          asset = { ratio: r.value, kind: 'image', base64: cropped, name: 'ai_' + r.value.replace(':', 'x') + '.jpg' };
-        } catch (_e) { /* keep original url if fetch/crop fails */ }
-        generated.push(asset);
-      }
+          const data = res?.data;
+          if (!data?.base64) throw new Error(data?.error || 'No image returned');
+          // Cover-crop the OpenAI output to the exact target ratio so the
+          // asset truly fills the frame with no letterbox bars.
+          let b64 = data.base64;
+          try { b64 = await cropToRatio(b64, r.w, r.h); } catch (_e) { /* keep as-is */ }
+          return { ratio: r.value, kind: 'image', base64: b64, name: 'ai_' + r.value.replace(':', 'x') + '.png' };
+        } catch (e) {
+          return { error: r.value + ': ' + ((e && e.message) || 'failed') };
+        }
+      }));
 
-      // 3. Replace existing image assets with the generated set (keep any videos).
+      const generated = results.filter((x) => x && !x.error);
+      const errors = results.filter((x) => x && x.error);
+      if (generated.length === 0) throw new Error(errors[0]?.error || 'All ratios failed');
       onAssets([...assets.filter((a) => a.kind === 'video'), ...generated]);
+      if (errors.length > 0) setGenError(errors.map((e) => e.error).join('; '));
     } catch (e) {
       setGenError((e && e.message) || 'Generation failed');
     } finally {
@@ -175,7 +171,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             onClick={generateAllRatios}
           >
             {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-            {busy ? 'Generating…' : 'Generate all ratios (AI)'}
+            {busy ? 'Generating…' : 'Generate all ratios (ChatGPT)'}
           </Button>
         )}
         {assets.length > 0 && (
