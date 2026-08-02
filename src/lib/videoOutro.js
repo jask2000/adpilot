@@ -53,11 +53,35 @@ export async function appendLogoOutro(videoSrc, logoUrl, ratio, outroSec = 2.5) 
   canvas.height = dims.h;
   const ctx = canvas.getContext('2d');
 
-  const stream = canvas.captureStream(30);
-  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-    ? 'video/webm;codecs=vp9'
-    : 'video/webm';
-  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
+  // Capture the canvas video stream at 30fps, then merge in the source
+  // video's audio track so the composited output keeps the original audio.
+  const canvasStream = canvas.captureStream(30);
+  let recordingStream = canvasStream;
+  try {
+    const vStream = video.captureStream
+      ? video.captureStream()
+      : video.mozCaptureStream
+        ? video.mozCaptureStream()
+        : null;
+    if (vStream) {
+      const audioTracks = vStream.getAudioTracks();
+      if (audioTracks.length) {
+        recordingStream = new MediaStream([
+          ...canvasStream.getVideoTracks(),
+          ...audioTracks,
+        ]);
+      }
+    }
+  } catch (_) {
+    // Audio capture not supported — fall back to video-only stream
+  }
+
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+    ? 'video/webm;codecs=vp9,opus'
+    : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : 'video/webm';
+  const recorder = new MediaRecorder(recordingStream, { mimeType, videoBitsPerSecond: 4_000_000 });
   const chunks = [];
   recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
   const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
