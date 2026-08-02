@@ -6,7 +6,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { base44 } from '@/api/base44Client';
-import { cropToRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
+import { cropToRatio, fitToRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
 
 const VIDEO_RATIOS = [
   { value: '9:16', ar: '9:16', label: '9:16 (Stories / Reels)' },
@@ -108,8 +108,8 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             fr.onerror = rej;
             fr.readAsDataURL(blob);
           });
-          const cropped = await cropToRatio(dataUrl, r.w, r.h);
-          asset = { ratio: r.value, kind: 'image', base64: cropped, name: 'ai_' + r.value.replace(':', 'x') + '.jpg' };
+          const fitted = await fitToRatio(dataUrl, r.w, r.h);
+          asset = { ratio: r.value, kind: 'image', base64: fitted, name: 'ai_' + r.value.replace(':', 'x') + '.jpg' };
         } catch (_e) { /* keep original url if fetch/crop fails */ }
         generated.push(asset);
       }
