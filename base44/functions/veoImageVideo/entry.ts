@@ -124,6 +124,17 @@ export default async function(req: Request) {
     return Response.json({ base64: 'data:video/mp4;base64,' + dlB64, ratio });
   } catch (error: any) {
     console.error('veoImageVideo: exception:', error?.message, error?.stack);
-    return Response.json({ error: (error && error.message) || 'Video generation failed' }, { status: 500 });
+    // Google API errors arrive as stringified JSON in error.message — try to
+    // extract a clean human-readable message and the real status code.
+    let msg = (error && error.message) || 'Video generation failed';
+    let status = 500;
+    try {
+      const parsed = typeof msg === 'string' ? JSON.parse(msg) : null;
+      if (parsed?.error?.message) {
+        msg = parsed.error.message;
+        if (parsed.error.code === 429) status = 429;
+      }
+    } catch (_) { /* not JSON, use raw message */ }
+    return Response.json({ error: msg }, { status });
   }
 }
