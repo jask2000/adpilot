@@ -26,9 +26,13 @@ export default function CustomerSms() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [replies, setReplies] = useState([]);
   const [loadingReplies, setLoadingReplies] = useState(false);
-  const [replyTo, setReplyTo] = useState(null);
-  const [replyMessage, setReplyMessage] = useState('');
-  const [sendingReply, setSendingReply] = useState(false);
+  const [chatPhone, setChatPhone] = useState(null);
+  const [chatName, setChatName] = useState('');
+  const [chatThread, setChatThread] = useState([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [loadingChat, setLoadingChat] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const [sendingChat, setSendingChat] = useState(false);
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -103,38 +107,59 @@ export default function CustomerSms() {
     }
   };
 
-  const openReply = (r) => {
-    setReplyTo(r);
-    setReplyMessage(`Hi${r.customer_name ? ` ${r.customer_name}` : ''}, thanks for your reply! `);
-    setReplyOpen(true);
-  };
-  const [replyOpen, setReplyOpen] = useState(false);
+  const normPhone = (p) => String(p || '').replace(/\D/g, '');
 
-  const sendReply = async () => {
-    if (!replyTo || !replyMessage.trim()) return;
-    setSendingReply(true);
+  const openChat = async (r) => {
+    setChatPhone(r.from_phone);
+    setChatName(r.customer_name || '');
+    setChatMessage(`Hi${r.customer_name ? ` ${r.customer_name}` : ''}, thanks for your reply! `);
+    setChatOpen(true);
+    await loadThread(r.from_phone);
+  };
+
+  const loadThread = async (phone) => {
+    const digits = normPhone(phone);
+    setLoadingChat(true);
     try {
-      const recipient = {
-        order_number: `REPLY-${String(replyTo.from_phone).replace(/\D/g, '')}`,
-        customer_name: replyTo.customer_name || '',
-        customer_phone: replyTo.from_phone,
-        store_name: '',
-      };
+      const [repliesAll, historyAll] = await Promise.all([
+        base44.entities.SmsReply.list('-received_at', 200),
+        base44.entities.SmsMessage.list('-sent_at', 200),
+      ]);
+      const inbound = (repliesAll || [])
+        .filter((x) => normPhone(x.from_phone) === digits)
+        .map((x) => ({ dir: 'in', time: x.received_at, text: x.body }));
+      const outbound = (historyAll || [])
+        .filter((x) => normPhone(x.customer_phone) === digits)
+        .map((x) => ({ dir: 'out', time: x.sent_at, text: x.message, status: x.status }));
+      const thread = [...inbound, ...outbound]
+        .filter((m) => m.time)
+        .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+      setChatThread(thread);
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Failed to load chat', description: e.response?.data?.error || e.message });
+    } finally {
+      setLoadingChat(false);
+    }
+  };
+
+  const sendChat = async () => {
+    if (!chatPhone || !chatMessage.trim()) return;
+    setSendingChat(true);
+    try {
       const res = await base44.functions.invoke('sendOrderSMS', {
         action: 'send',
-        recipients: [recipient],
-        message: replyMessage,
+        recipients: [{ order_number: `REPLY-${normPhone(chatPhone)}`, customer_name: chatName, customer_phone: chatPhone, store_name: '' }],
+        message: chatMessage,
         date: new Date().toISOString().slice(0, 10),
       });
       const { sent, failed } = res.data;
       toast({ title: sent ? 'Reply sent' : 'Send failed', description: failed ? `${failed} failed` : 'Message delivered', variant: sent ? 'default' : 'destructive' });
-      setReplyOpen(false);
-      setReplyTo(null);
-      await loadHistory();
+      setChatMessage('');
+      await Promise.all([loadThread(chatPhone), loadHistory(), loadReplies()]);
     } catch (e) {
       toast({ variant: 'destructive', title: 'Send failed', description: e.response?.data?.error || e.message });
     } finally {
-      setSendingReply(false);
+      setSendingChat(false);
     }
   };
 
@@ -287,12 +312,12 @@ export default function CustomerSms() {
                 </thead>
                 <tbody>
                   {replies.map((r) => (
-                    <tr key={r.id} className="border-t">
+                    <tr key={r.id} className="border-t cursor-pointer hover:bg-muted/40" onClick={() => openChat(r)}>
                       <td className="p-2 text-xs text-muted-foreground">{r.received_at ? new Date(r.received_at).toLocaleString() : '—'}</td>
                       <td className="p-2 text-xs">{r.from_phone}</td>
                       <td className="p-2">{r.customer_name || '—'}</td>
-                      <td className="p-2 max-w-xs">{r.body}</td>
-                      <td className="p-2"><Button size="sm" variant="outline" onClick={() => openReply(r)}><Send className="h-3 w-3" /> Reply</Button></td>
+                      <td className="p-2 max-w-xs truncate">{r.body}</td>
+                      <td className="p-2"><Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openChat(r); }}><MessageSquare className="h-3 w-3" /> Open</Button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -327,26 +352,42 @@ export default function CustomerSms() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={replyOpen} onOpenChange={setReplyOpen}>
+      <Dialog open={chatOpen} onOpenChange={setChatOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Reply to {replyTo?.customer_name || replyTo?.from_phone || 'customer'}</DialogTitle>
+            <DialogTitle>{chatName || 'Customer'} · <span className="text-muted-foreground text-sm font-normal">{chatPhone}</span></DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">To: <span className="font-medium text-foreground">{replyTo?.from_phone}</span></div>
-            <div className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
-              Their message: <span className="text-foreground">{replyTo?.body}</span>
+          <div className="flex flex-col h-[60vh]">
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {loadingChat ? (
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : chatThread.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No messages yet.</p>
+              ) : (
+                chatThread.map((m, i) => (
+                  <div key={i} className={`flex ${m.dir === 'out' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${m.dir === 'out' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                      <div>{m.text}</div>
+                      <div className={`text-[10px] mt-1 ${m.dir === 'out' ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                        {m.time ? new Date(m.time).toLocaleString() : ''}
+                        {m.dir === 'out' && m.status ? ` · ${m.status}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-            <Textarea value={replyMessage} onChange={(e) => setReplyMessage(e.target.value)} rows={4} />
-            <div className="text-right text-xs text-muted-foreground">{replyMessage.length} chars</div>
+            <div className="border-t pt-3 mt-3 space-y-2">
+              <Textarea value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} rows={2} placeholder="Type a reply…" />
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">{chatMessage.length} chars</span>
+                <Button size="sm" onClick={sendChat} disabled={sendingChat || !chatMessage.trim()}>
+                  {sendingChat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Send
+                </Button>
+              </div>
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReplyOpen(false)} disabled={sendingReply}>Cancel</Button>
-            <Button onClick={sendReply} disabled={sendingReply || !replyMessage.trim()}>
-              {sendingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Send reply
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
