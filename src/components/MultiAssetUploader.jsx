@@ -30,6 +30,8 @@ export default function MultiAssetUploader({ assets, onAssets }) {
   const [tab, setTab] = useState('img-1:1');
   const [useStartImage, setUseStartImage] = useState(false);
   const [startImageIdx, setStartImageIdx] = useState('');
+  const [doGuidance, setDoGuidance] = useState('');
+  const [dontGuidance, setDontGuidance] = useState('');
   const [logoUrl, setLogoUrl] = useState(() => {
     try { return localStorage.getItem(LOGO_STORAGE_KEY) || ''; } catch (_) { return ''; }
   });
@@ -180,8 +182,16 @@ export default function MultiAssetUploader({ assets, onAssets }) {
       const up = await base44.integrations.Core.UploadFile({ file: fileObj });
       const srcUrl = up.file_url;
 
-      const sourceRatio = firstImage.ratio;
-      const targets = ASSET_RATIOS.filter((r) => r.value !== sourceRatio);
+      const existingImageRatios = new Set(assets.filter((a) => a.kind === 'image').map((a) => a.ratio));
+      const targets = ASSET_RATIOS.filter((r) => !existingImageRatios.has(r.value));
+      if (targets.length === 0) {
+        setGenError('All ratios already have images — nothing to generate.');
+        return;
+      }
+      const guidanceParts = [];
+      if (doGuidance.trim()) guidanceParts.push('DO: ' + doGuidance.trim());
+      if (dontGuidance.trim()) guidanceParts.push('DO NOT: ' + dontGuidance.trim());
+      const guidancePrompt = guidanceParts.join('. ') + (guidanceParts.length ? '.' : '');
       const results = await Promise.all(targets.map(async (r) => {
         try {
           const res = await base44.functions.invoke('openaiImageGen', {
@@ -190,6 +200,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             w: r.w,
             h: r.h,
             label: r.label,
+            prompt: guidancePrompt,
           });
           const data = res?.data;
           if (!data?.base64) throw new Error(data?.error || 'No image returned');
@@ -202,8 +213,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
       const generated = results.filter((x) => x && !x.error);
       const errors = results.filter((x) => x && x.error);
       if (generated.length === 0) throw new Error(errors[0]?.error || 'All ratios failed');
-      const kept = assets.filter((a) => a.kind === 'video' || !a.name?.startsWith('ai_'));
-      onAssets([...kept, ...generated]);
+      onAssets([...assets, ...generated]);
       if (errors.length > 0) setGenError(errors.map((e) => e.error).join('; '));
     } catch (e) {
       setGenError((e && e.message) || 'Generation failed');
@@ -245,17 +255,42 @@ export default function MultiAssetUploader({ assets, onAssets }) {
           />
         </label>
         {firstImage && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="h-9"
-            disabled={busy}
-            onClick={generateAllRatios}
-          >
-            {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-            {busy ? 'Recomposing…' : 'Recompose to all ratios (ChatGPT)'}
-          </Button>
+          <div className="flex flex-col gap-2 w-full max-w-xl border-t border-border/60 pt-3 mt-1">
+            <p className="text-xs font-medium text-muted-foreground">Guide the AI (optional)</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-muted-foreground">Do</Label>
+                <Textarea
+                  placeholder="e.g. add steam, keep brand visible, bright lighting"
+                  value={doGuidance}
+                  onChange={(e) => setDoGuidance(e.target.value)}
+                  rows={2}
+                  className="text-sm"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-muted-foreground">Don't</Label>
+                <Textarea
+                  placeholder="e.g. no people, no extra text, no zoom in"
+                  value={dontGuidance}
+                  onChange={(e) => setDontGuidance(e.target.value)}
+                  rows={2}
+                  className="text-sm"
+                />
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-9 w-fit"
+              disabled={busy}
+              onClick={generateAllRatios}
+            >
+              {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+              {busy ? 'Recomposing…' : 'Generate missing ratios (ChatGPT)'}
+            </Button>
+          </div>
         )}
         {assets.length > 0 && (
           <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => onAssets([])}>
