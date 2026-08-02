@@ -50,10 +50,10 @@ export default async function(req) {
     const size = closestSize(w, h);
     const guidance = (prompt && prompt.trim()) ? ('\n\nAdditional user guidance: ' + prompt.trim()) : '';
     const finalPrompt = 'Recompose this food advertising photo into a ' + ratio + ' (' + (label || ratio) +
-        ') aspect ratio. ABSOLUTE COLOR FIDELITY: reproduce the EXACT background color and full color palette of the reference image pixel-for-pixel — same white balance, same color temperature, same saturation. Do NOT add any pink, magenta, warm, or cool color cast. Do NOT shift, tint, warm, cool, or recolor the background or any element. The colors must be a perfect match to the original. ' +
-        'Keep EVERY element from the original — the pizza, the box, the table, the branding, the steam, any props and background — and REARRANGE them into a wider/taller balanced layout so the WHOLE scene still fits completely. NEVER zoom in, NEVER crop tightly onto the pizza, NEVER cut off, trim, or remove ANY part of the frame or any object — every item must remain fully visible and inside the new frame, just repositioned to fill the aspect ratio. ' +
-        'Show a wide establishing shot of the full scene recomposed to fill the new frame naturally with tasteful negative space for ad copy. ' +
-        'Identical product, plating, colors, lighting, and styling as the reference. TEXT & BRANDING: do NOT invent, scramble, or add any new text. If the original contains any text, logo, or branding, reproduce it EXACTLY as it appears — same words, same font, same lettering, same placement — never garbled or misspelled. Crisp sharp detail, no people, no extra text overlay.' + guidance;
+        ') aspect ratio. Keep the color palette UNCHANGED — same colors, same white balance, same color temperature, same saturation; do NOT shift, tint, warm, cool, or recolor the background or any element. ' +
+        'Keep the image intact — do NOT zoom in, crop, cut off, trim, or remove any part of the frame or any object. Keep EVERY element from the original (the food, the box, the table, the branding, the steam, any props and background) and REARRANGE them into a balanced layout so the whole scene still fits completely within the new aspect ratio. ' +
+        'Do NOT add any people. Identical product, plating, colors, lighting, and styling as the reference. ' +
+        'TEXT & BRANDING: reproduce any existing text, logo, or branding EXACTLY as it appears — same words, same font, same lettering, same placement; do NOT invent, scramble, or add any new text. Crisp sharp detail, no extra text overlay.' + guidance;
 
     const result = await openai.images.edit({
       model: 'gpt-image-1',
