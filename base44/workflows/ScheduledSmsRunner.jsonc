@@ -1,5 +1,5 @@
 {
-  "description": "Processes scheduled SMS/MMS campaigns whose send_at time has arrived, dispatching them via Twilio every 5 minutes.",
+  "description": "Processes scheduled SMS/MMS campaigns whose send_at time has arrived, dispatching them via Twilio every hour.",
   "trigger": {
     "condition": null,
     "config": {
@@ -9,7 +9,7 @@
       "cron_expression": null,
       "one_time_date": null,
       "timezone": "UTC",
-      "interval_value": 5,
+      "interval_value": 60,
       "interval_unit": "minutes",
       "interval_anchor": null,
       "ends_type": "never",
