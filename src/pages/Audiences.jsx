@@ -39,28 +39,30 @@ export default function Audiences() {
   const [lk, setLk] = useState({ origin: '', country: 'CA', ratio: '0.01' });
   const [editing, setEditing] = useState(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await base44.functions.invoke('metaAds', {
-          action: 'list_accounts',
-        });
-        const accs = res.data.accounts || [];
-        const cfgs = await base44.entities.AppConfig.list();
-        const saved = cfgs[0]?.selected_ad_account_id;
-        const acc =
-          accs.find((a) => String(a.account_id) === String(saved)) ||
-          accs[0] ||
-          null;
-        setAccount(acc);
-        if (acc) await loadAudiences(acc);
-      } catch (e) {
-        setMsg(e.message);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const initialLoad = async () => {
+    setLoading(true);
+    setMsg(null);
+    try {
+      const res = await base44.functions.invoke('metaAds', {
+        action: 'list_accounts',
+      });
+      const accs = res.data.accounts || [];
+      const cfgs = await base44.entities.AppConfig.list();
+      const saved = cfgs[0]?.selected_ad_account_id;
+      const acc =
+        accs.find((a) => String(a.account_id) === String(saved)) ||
+        accs[0] ||
+        null;
+      setAccount(acc);
+      if (acc) await loadAudiences(acc);
+    } catch (e) {
+      setMsg(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { initialLoad(); }, []);
 
   const loadAudiences = async (acc) => {
     try {
@@ -281,7 +283,19 @@ export default function Audiences() {
           Working…
         </div>
       )}
-      {msg && <p className="text-sm">{msg}</p>}
+      {msg && (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-2.5">
+          <p className="text-sm text-destructive">{msg}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={initialLoad}
+          >
+            <Loader2 className="h-3.5 w-3.5 mr-1.5" />
+            Retry
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

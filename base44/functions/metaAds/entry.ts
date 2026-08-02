@@ -565,6 +565,7 @@ Deno.serve(async (req) => {
       const cdata: any = await cr.json();
       if (cdata.error) return Response.json({ error: cdata.error.message }, { status: 502 });
       const sdata: any = await sr.json().catch(() => ({}));
+      if (sdata.error) return Response.json({ error: sdata.error.message }, { status: 502 });
       const custom = (cdata.data || []).map((a: any) => ({ ...a, kind: 'custom' }));
       const saved = ((sdata && sdata.data) || []).map((a: any) => ({ ...a, subtype: 'SAVED', kind: 'saved' }));
       return Response.json({ audiences: [...custom, ...saved] });
