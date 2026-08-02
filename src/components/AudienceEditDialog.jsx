@@ -25,7 +25,7 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [form, setForm] = useState({ name: '', description: '', ageMin: '', ageMax: '', gender: 'all' });
-  const [geo, setGeo] = useState({ countries: [], cities: [], regions: [], zips: [] });
+  const [geo, setGeo] = useState({ countries: [], cities: [], regions: [], zips: [], customLocations: [] });
   const [countryInput, setCountryInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState('city');
@@ -53,6 +53,13 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
       cities: (g.cities || []).map((c) => ({ key: c.key, name: c.name, radius: c.radius || 25 })),
       regions: (g.regions || []).map((r) => ({ key: r.key, name: r.name })),
       zips: (g.zips || []).map((z) => ({ key: z.key, name: z.name })),
+      customLocations: (g.custom_locations || []).map((l) => ({
+        name: l.name || l.address_string || `${l.latitude}, ${l.longitude}`,
+        latitude: l.latitude,
+        longitude: l.longitude,
+        radius: l.radius || 5,
+        distance_unit: l.distance_unit || 'mile',
+      })),
     });
   }, [audience]);
 
@@ -102,6 +109,7 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
     else if (type === 'city') setGeo({ ...geo, cities: geo.cities.filter((c) => c.key !== key) });
     else if (type === 'region') setGeo({ ...geo, regions: geo.regions.filter((r) => r.key !== key) });
     else if (type === 'zip') setGeo({ ...geo, zips: geo.zips.filter((z) => z.key !== key) });
+    else if (type === 'custom') setGeo({ ...geo, customLocations: geo.customLocations.filter((_, i) => i !== key) });
   };
 
   const updateCityRadius = (key, radius) => {
@@ -115,6 +123,13 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
     const c = countryInput.trim().toUpperCase();
     if (c && !geo.countries.includes(c)) setGeo({ ...geo, countries: [...geo.countries, c] });
     setCountryInput('');
+  };
+
+  const updateCustomRadius = (index, radius) => {
+    setGeo({
+      ...geo,
+      customLocations: geo.customLocations.map((l, i) => (i === index ? { ...l, radius: Math.max(1, parseInt(radius) || 5) } : l)),
+    });
   };
 
   const save = async (e) => {
@@ -136,6 +151,9 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
         if (geo.cities.length) gl.cities = geo.cities.map((c) => ({ key: c.key, name: c.name, radius: c.radius, distance_unit: 'kilometer' })); else delete gl.cities;
         if (geo.regions.length) gl.regions = geo.regions; else delete gl.regions;
         if (geo.zips.length) gl.zips = geo.zips; else delete gl.zips;
+        if (geo.customLocations.length) gl.custom_locations = geo.customLocations.map((l) => ({
+          latitude: l.latitude, longitude: l.longitude, radius: l.radius, distance_unit: l.distance_unit || 'mile', name: l.name,
+        })); else delete gl.custom_locations;
         t.geo_locations = gl;
         if (form.ageMin) t.age_min = parseInt(form.ageMin, 10); else delete t.age_min;
         if (form.ageMax) t.age_max = parseInt(form.ageMax, 10); else delete t.age_max;
@@ -256,7 +274,7 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
                 )}
               </div>
 
-              {(geo.cities.length > 0 || geo.regions.length > 0 || geo.zips.length > 0) && (
+              {(geo.cities.length > 0 || geo.regions.length > 0 || geo.zips.length > 0 || geo.customLocations.length > 0) && (
                 <div className="space-y-2">
                   <Label className="text-xs">Selected locations</Label>
                   <div className="space-y-1.5">
@@ -302,6 +320,28 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
                         <button type="button" onClick={() => removeLocation('zip', z.key)} className="hover:text-destructive">
                           <X className="h-3.5 w-3.5" />
                         </button>
+                      </div>
+                    ))}
+                    {geo.customLocations.map((l, i) => (
+                      <div key={`custom-${i}`} className="flex items-center justify-between rounded-md border px-2.5 py-1.5 text-sm">
+                        <span className="flex items-center gap-1.5 truncate">
+                          <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          {l.name}
+                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={l.radius}
+                            onChange={(e) => updateCustomRadius(i, e.target.value)}
+                            className="w-20 h-7 text-xs"
+                          />
+                          <span className="text-xs text-muted-foreground">{l.distance_unit}</span>
+                          <button type="button" onClick={() => removeLocation('custom', i)} className="hover:text-destructive">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
