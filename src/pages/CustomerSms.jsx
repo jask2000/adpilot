@@ -26,6 +26,9 @@ export default function CustomerSms() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [replies, setReplies] = useState([]);
   const [loadingReplies, setLoadingReplies] = useState(false);
+  const [replyTo, setReplyTo] = useState(null);
+  const [replyMessage, setReplyMessage] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -97,6 +100,41 @@ export default function CustomerSms() {
       toast({ variant: 'destructive', title: 'Send failed', description: e.response?.data?.error || e.message });
     } finally {
       setSending(false);
+    }
+  };
+
+  const openReply = (r) => {
+    setReplyTo(r);
+    setReplyMessage(`Hi${r.customer_name ? ` ${r.customer_name}` : ''}, thanks for your reply! `);
+    setReplyOpen(true);
+  };
+  const [replyOpen, setReplyOpen] = useState(false);
+
+  const sendReply = async () => {
+    if (!replyTo || !replyMessage.trim()) return;
+    setSendingReply(true);
+    try {
+      const recipient = {
+        order_number: `REPLY-${String(replyTo.from_phone).replace(/\D/g, '')}`,
+        customer_name: replyTo.customer_name || '',
+        customer_phone: replyTo.from_phone,
+        store_name: '',
+      };
+      const res = await base44.functions.invoke('sendOrderSMS', {
+        action: 'send',
+        recipients: [recipient],
+        message: replyMessage,
+        date: new Date().toISOString().slice(0, 10),
+      });
+      const { sent, failed } = res.data;
+      toast({ title: sent ? 'Reply sent' : 'Send failed', description: failed ? `${failed} failed` : 'Message delivered', variant: sent ? 'default' : 'destructive' });
+      setReplyOpen(false);
+      setReplyTo(null);
+      await loadHistory();
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Send failed', description: e.response?.data?.error || e.message });
+    } finally {
+      setSendingReply(false);
     }
   };
 
@@ -244,6 +282,7 @@ export default function CustomerSms() {
                     <th className="text-left p-2 font-medium">From</th>
                     <th className="text-left p-2 font-medium">Customer</th>
                     <th className="text-left p-2 font-medium">Message</th>
+                    <th className="w-20 p-2"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -253,6 +292,7 @@ export default function CustomerSms() {
                       <td className="p-2 text-xs">{r.from_phone}</td>
                       <td className="p-2">{r.customer_name || '—'}</td>
                       <td className="p-2 max-w-xs">{r.body}</td>
+                      <td className="p-2"><Button size="sm" variant="outline" onClick={() => openReply(r)}><Send className="h-3 w-3" /> Reply</Button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -282,6 +322,29 @@ export default function CustomerSms() {
             <Button onClick={confirmSend} disabled={sending || !message.trim()}>
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Send {selected.size} SMS
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={replyOpen} onOpenChange={setReplyOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Reply to {replyTo?.customer_name || replyTo?.from_phone || 'customer'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">To: <span className="font-medium text-foreground">{replyTo?.from_phone}</span></div>
+            <div className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
+              Their message: <span className="text-foreground">{replyTo?.body}</span>
+            </div>
+            <Textarea value={replyMessage} onChange={(e) => setReplyMessage(e.target.value)} rows={4} />
+            <div className="text-right text-xs text-muted-foreground">{replyMessage.length} chars</div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReplyOpen(false)} disabled={sendingReply}>Cancel</Button>
+            <Button onClick={sendReply} disabled={sendingReply || !replyMessage.trim()}>
+              {sendingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Send reply
             </Button>
           </DialogFooter>
         </DialogContent>
