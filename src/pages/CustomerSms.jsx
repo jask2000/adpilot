@@ -93,9 +93,8 @@ export default function CustomerSms() {
   };
 
   const toggleAll = () => {
-    const eligible = customers.filter((c) => !c.already_sent);
-    if (selected.size === eligible.length) setSelected(new Set());
-    else setSelected(new Set(eligible.map((c) => c.order_number)));
+    if (selected.size === customers.length) setSelected(new Set());
+    else setSelected(new Set(customers.map((c) => c.order_number)));
   };
 
   const openCompose = () => {
@@ -180,7 +179,7 @@ export default function CustomerSms() {
     }
   };
 
-  const eligibleCount = customers.filter((c) => !c.already_sent).length;
+
 
   return (
     <div className="p-6 space-y-6 max-w-5xl">
@@ -213,10 +212,10 @@ export default function CustomerSms() {
       {customers.length > 0 && (
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle>{customers.length} customer(s) · {eligibleCount} eligible</CardTitle>
+            <CardTitle>{customers.length} customer(s) · {selected.size} selected</CardTitle>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={toggleAll} disabled={!eligibleCount}>
-                {selected.size === eligibleCount && eligibleCount > 0 ? 'Clear' : 'Select all'}
+              <Button variant="outline" size="sm" onClick={toggleAll} disabled={!customers.length}>
+                {selected.size === customers.length && customers.length > 0 ? 'Clear' : 'Select all'}
               </Button>
               <Button size="sm" onClick={openCompose} disabled={!selected.size}>
                 <Send className="h-4 w-4" /> Compose &amp; Send ({selected.size})
@@ -243,7 +242,6 @@ export default function CustomerSms() {
                         <Checkbox
                           checked={selected.has(c.order_number)}
                           onCheckedChange={() => toggle(c.order_number)}
-                          disabled={c.already_sent}
                         />
                       </td>
                       <td className="p-2 font-mono text-xs">{c.order_number}</td>
