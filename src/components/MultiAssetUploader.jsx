@@ -6,7 +6,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { base44 } from '@/api/base44Client';
-import { cropToRatio, fitToRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
+import { cropToRatio, fitToRatio, getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
 
 const VIDEO_RATIOS = [
   { value: '9:16', ar: '9:16', label: '9:16 (Stories / Reels)' },
@@ -30,14 +30,16 @@ export default function MultiAssetUploader({ assets, onAssets }) {
     try {
       const next = [...assets];
       for (const file of files) {
-        const r = ASSET_RATIOS.find((x) => x.value === detectRatio(file)) || ASSET_RATIOS[0];
         if (kind === 'image') {
           const dataUrl = await readAsDataUrl(file);
-          const cropped = await cropToRatio(dataUrl, r.w, r.h);
-          next.push({ ratio: r.value, kind: 'image', base64: cropped, name: file.name });
+          const dims = await getImageDimensions(dataUrl);
+          const ratioVal = closestRatio(dims.w, dims.h);
+          // Keep the full original image untouched (no crop) so all content
+          // is preserved — the ratio label reflects its true aspect ratio.
+          next.push({ ratio: ratioVal, kind: 'image', base64: dataUrl, name: file.name });
         } else {
           const dataUrl = await readAsDataUrl(file);
-          next.push({ ratio: r.value, kind: 'video', base64: dataUrl, name: file.name });
+          next.push({ ratio: '9:16', kind: 'video', base64: dataUrl, name: file.name });
         }
       }
       onAssets(next);

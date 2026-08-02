@@ -76,6 +76,29 @@ export function fitToRatio(dataUrl, rw, rh) {
   });
 }
 
+// Returns the natural pixel dimensions of an image data URL.
+export function getImageDimensions(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.width, h: img.height });
+    img.onerror = () => resolve({ w: 1, h: 1 });
+    img.src = dataUrl;
+  });
+}
+
+// Picks the ASSET_RATIO whose aspect ratio is closest to the image's own.
+export function closestRatio(w, h) {
+  if (!w || !h) return ASSET_RATIOS[0].value;
+  const ar = w / h;
+  let best = ASSET_RATIOS[0];
+  let bestDiff = Infinity;
+  for (const r of ASSET_RATIOS) {
+    const diff = Math.abs(ar - r.w / r.h);
+    if (diff < bestDiff) { bestDiff = diff; best = r; }
+  }
+  return best.value;
+}
+
 export const ASSET_RATIOS = [
   { value: '1:1', label: '1:1 · Feed', w: 1, h: 1 },
   { value: '4:5', label: '4:5 · Instagram Feed', w: 4, h: 5 },
