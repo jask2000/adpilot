@@ -249,7 +249,7 @@ export default function CustomerSms() {
                       <td className="p-2">{c.customer_phone}</td>
                       <td className="p-2">{c.store_name || '—'}</td>
                       <td className="p-2">
-                        {c.already_sent ? <Badge variant="secondary">Already texted</Badge> : <Badge>New</Badge>}
+                        {c.already_sent ? <Badge variant="secondary">Already texted</Badge> : c.previously_failed ? <Badge variant="destructive">Failed — retry</Badge> : <Badge>New</Badge>}
                       </td>
                     </tr>
                   ))}

@@ -69,13 +69,15 @@ export default async function(req) {
         return od === targetDate && normalizePhone(o.customer_phone);
       });
       const already = await base44.asServiceRole.entities.SmsMessage.filter({ campaign_date: targetDate });
-      const sentSet = new Set(already.map((s) => s.order_number));
+      const sentSet = new Set(already.filter((s) => s.status === 'sent').map((s) => s.order_number));
+      const failedSet = new Set(already.filter((s) => s.status === 'failed').map((s) => s.order_number));
       const customers = dayOrders.map((o) => ({
         order_number: o.order_number,
         customer_name: o.customer_name,
         customer_phone: o.customer_phone,
         store_name: o.store_name,
         already_sent: sentSet.has(o.order_number),
+        previously_failed: failedSet.has(o.order_number),
       }));
       return Response.json({ date: targetDate, customers });
     }
