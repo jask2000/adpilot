@@ -83,6 +83,26 @@ export default function CreateAdForm({ account }) {
     setError(null);
     setResult(null);
     try {
+      // Inline base64 payloads exceed the gateway request-size limit (502), so
+      // upload any asset that isn't already a hosted URL via UploadFile first,
+      // then send only URLs to the backend — it fetches them server-side.
+      const uploadedAssets = [];
+      for (const a of assets) {
+        if (a.url) {
+          uploadedAssets.push(a);
+        } else if (a.base64) {
+          const blob = await (await fetch(a.base64)).blob();
+          const file = new File(
+            [blob],
+            a.name || (a.kind === 'video' ? 'asset.mp4' : 'asset.jpg'),
+            { type: blob.type }
+          );
+          const { file_url } = await base44.integrations.Core.UploadFile({ file });
+          uploadedAssets.push({ ...a, base64: undefined, url: file_url });
+        } else {
+          uploadedAssets.push(a);
+        }
+      }
       const res = await base44.functions.invoke('metaAds', {
         action: 'create_ad_multi',
         account_id: account.account_id || account.id,
@@ -99,7 +119,7 @@ export default function CreateAdForm({ account }) {
           const loc = storeLocations.find((l) => l.name === name);
           return loc ? { address: loc.address, city: loc.city, province: loc.province, postal_code: loc.postal_code, country: loc.country, radius: parseFloat(radius) || 4 } : null;
         }).filter(Boolean),
-        assets: assets.map((a) => ({ kind: a.kind, base64: a.base64, url: a.url, name: a.name, ratio: a.ratio })),
+        assets: uploadedAssets.map((a) => ({ kind: a.kind, url: a.url, name: a.name, ratio: a.ratio })),
       });
       setResult(res.data || res);
     } catch (err) {
