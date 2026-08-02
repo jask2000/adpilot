@@ -26,7 +26,15 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select';
-import { Loader2, Users, Plus } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Loader2, Users, Plus, Pencil } from 'lucide-react';
 
 export default function Audiences() {
   const [accounts, setAccounts] = useState(null);
@@ -37,6 +45,8 @@ export default function Audiences() {
   const [msg, setMsg] = useState(null);
   const [ca, setCa] = useState({ name: '', description: '' });
   const [lk, setLk] = useState({ origin: '', country: 'CA', ratio: '0.01' });
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', description: '' });
 
   useEffect(() => {
     (async () => {
@@ -119,6 +129,33 @@ export default function Audiences() {
     }
   };
 
+  const openEdit = (a) => {
+    setEditing(a);
+    setEditForm({ name: a.name || '', description: a.description || '' });
+  };
+
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    if (!editing || !editForm.name) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await base44.functions.invoke('metaAds', {
+        action: 'update_audience',
+        audience_id: editing.id,
+        name: editForm.name,
+        description: editForm.description,
+      });
+      setEditing(null);
+      await loadAudiences(account);
+      setMsg('Audience updated.');
+    } catch (e) {
+      setMsg(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) return <div className="p-8 text-muted-foreground">Loading…</div>;
 
   return (
@@ -128,7 +165,7 @@ export default function Audiences() {
           <Users className="h-6 w-6" /> Audiences
         </h1>
         <p className="text-muted-foreground text-sm">
-          Create and reuse custom &amp; lookalike audiences for targeting.
+          Create, edit, and reuse custom &amp; lookalike audiences for targeting.
         </p>
       </div>
 
@@ -234,6 +271,7 @@ export default function Audiences() {
                   <TableHead>Type</TableHead>
                   <TableHead>Size</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -245,6 +283,17 @@ export default function Audiences() {
                     <TableCell className="text-muted-foreground">
                       {a.status || '—'}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEdit(a)}
+                        disabled={busy}
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                        Edit
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -253,7 +302,45 @@ export default function Audiences() {
         </CardContent>
       </Card>
 
-      {busy && (
+      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit audience</DialogTitle>
+            <DialogDescription>
+              Update the name and description for this {editing?.subtype} audience.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={saveEdit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input
+                required
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={3}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditing(null)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Save changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {busy && !editing && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Working…

@@ -603,6 +603,23 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, audience_id: data.id });
     }
 
+    if (action === 'update_audience') {
+      const { audience_id, name, description } = body;
+      if (!audience_id) return Response.json({ error: 'audience_id required' }, { status: 400 });
+      const updateBody: any = {};
+      if (name != null) updateBody.name = name;
+      if (description != null) updateBody.description = description;
+      if (!Object.keys(updateBody).length) return Response.json({ error: 'name or description required' }, { status: 400 });
+      const r = await fetch(`${GRAPH}/${audience_id}`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateBody),
+      });
+      const data: any = await r.json();
+      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      return Response.json({ success: true });
+    }
+
     if (action === 'list_ads') {
       const { account_id } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
