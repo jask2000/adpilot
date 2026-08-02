@@ -12,7 +12,7 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select';
-import { Loader2, Upload, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Loader2, Upload, CheckCircle2, AlertCircle, Video } from 'lucide-react';
 
 const OBJECTIVES = [
   { value: 'OUTCOME_AWARENESS', label: 'Awareness' },
@@ -46,6 +46,7 @@ export default function CreateAdForm({ account }) {
     cta: 'LEARN_MORE',
   });
   const [image, setImage] = useState(null);
+  const [video, setVideo] = useState(null);
   const [audiences, setAudiences] = useState([]);
   const [audienceId, setAudienceId] = useState('');
   const [audienceKind, setAudienceKind] = useState('');
@@ -80,6 +81,20 @@ export default function CreateAdForm({ account }) {
         name: f.name,
         preview: URL.createObjectURL(f),
       });
+      // Switching to an image clears any previously chosen video.
+      setVideo(null);
+    };
+    reader.readAsDataURL(f);
+  };
+
+  const onVideo = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setVideo({ base64: reader.result, name: f.name });
+      // Switching to a video clears any previously chosen image.
+      setImage(null);
     };
     reader.readAsDataURL(f);
   };
@@ -105,6 +120,8 @@ export default function CreateAdForm({ account }) {
         audience_kind: audienceKind || null,
         image_base64: image?.base64 || null,
         image_filename: image?.name || null,
+        video_base64: video?.base64 || null,
+        video_filename: video?.name || null,
       });
       setResult(res);
     } catch (err) {
@@ -243,24 +260,36 @@ export default function CreateAdForm({ account }) {
           </div>
 
           <div className="space-y-2">
-            <Label>Media (image)</Label>
-            <div className="flex items-center gap-4">
+            <Label>Media</Label>
+            <p className="text-xs text-muted-foreground">
+              Upload an image or a short MP4 video (≤~30s works best). Video ads
+              work great in Reels/Stories (9:16) and Feed (1:1 / 4:5).
+            </p>
+            <div className="flex items-center gap-4 flex-wrap">
               <label className="cursor-pointer">
                 <span className="inline-flex items-center gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm hover:bg-accent">
                   <Upload className="h-4 w-4" /> Upload image
                 </span>
                 <input type="file" accept="image/*" className="hidden" onChange={onFile} />
               </label>
+              <label className="cursor-pointer">
+                <span className="inline-flex items-center gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm hover:bg-accent">
+                  <Video className="h-4 w-4" /> Upload video
+                </span>
+                <input type="file" accept="video/mp4,video/*" className="hidden" onChange={onVideo} />
+              </label>
               {image && (
                 <span className="text-sm text-muted-foreground truncate">{image.name}</span>
               )}
+              {video && (
+                <span className="text-sm text-muted-foreground truncate">{video.name}</span>
+              )}
             </div>
             {image?.preview && (
-              <img
-                src={image.preview}
-                alt="preview"
-                className="max-h-40 rounded-md border"
-              />
+              <img src={image.preview} alt="preview" className="max-h-40 rounded-md border" />
+            )}
+            {video?.base64 && (
+              <video src={video.base64} muted className="max-h-40 rounded-md border" controls />
             )}
           </div>
 

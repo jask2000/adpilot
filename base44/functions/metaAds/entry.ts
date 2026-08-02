@@ -186,6 +186,7 @@ Deno.serve(async (req) => {
       const {
         account_id, campaign_name, objective, daily_budget, ad_name,
         message, link, headline, image_base64, image_filename, call_to_action_type,
+        video_base64, video_filename,
       } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
@@ -306,6 +307,36 @@ Deno.serve(async (req) => {
         }
       }
 
+      // 3b. Upload video (if provided) → video_id
+      let video_id: string | null = null;
+      if (!image_hash && video_base64) {
+        try {
+          const vb64 = String(video_base64).split(',').pop() || '';
+          const vbinary = atob(vb64);
+          const vbytes = new Uint8Array(vbinary.length);
+          for (let i = 0; i < vbinary.length; i++) vbytes[i] = vbinary.charCodeAt(i);
+          const vfilename = video_filename || `advideo_${Date.now()}.mp4`;
+          const vboundary = 'b44vid' + Math.random().toString().slice(2);
+          const vhead =
+            `--${vboundary}\r\n` +
+            (headline ? `Content-Disposition: form-data; name="title"\r\n\r\n${headline}\r\n--${vboundary}\r\n` : '') +
+            `Content-Disposition: form-data; name="source"; filename="${vfilename}"\r\n` +
+            `Content-Type: video/mp4\r\n\r\n`;
+          const vtail = `\r\n--${vboundary}--\r\n`;
+          const vblob = new Blob([vhead, vbytes, vtail], { type: `multipart/form-data; boundary=${vboundary}` });
+          const vr = await fetch(`${GRAPH}/${actId}/advideos`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/form-data; boundary=${vboundary}` },
+            body: vblob,
+          });
+          const vdata: any = await vr.json();
+          if (vdata.error) return Response.json({ error: 'video: ' + vdata.error.message, campaign_id, adset_id }, { status: 502 });
+          video_id = vdata.id || null;
+        } catch (e) {
+          return Response.json({ error: 'video upload failed: ' + (e as Error).message, campaign_id, adset_id }, { status: 502 });
+        }
+      }
+
       // 4. Page id
       let page_id = body.page_id;
       if (!page_id) {
@@ -315,15 +346,26 @@ Deno.serve(async (req) => {
       }
       if (!page_id) return Response.json({ error: 'No Facebook Page connected to your account. Connect a Page to publish ads.', campaign_id, adset_id }, { status: 400 });
 
-      // 5. Ad creative
-      const linkData: any = { message: message || '' };
-      if (link) linkData.link = link;
-      if (headline) linkData.name = headline;
-      if (image_hash) linkData.image_hash = image_hash;
-      if (call_to_action_type) linkData.call_to_action = { type: call_to_action_type, value: link ? { link } : {} };
+      // 5. Ad creative — image link_data, or video_data when a video was uploaded
+      let storySpec: any;
+      if (video_id) {
+        const videoData: any = { video_id };
+        if (message) videoData.message = message;
+        if (headline) videoData.title = headline;
+        if (link) videoData.link = link;
+        if (call_to_action_type) videoData.call_to_action = { type: call_to_action_type, value: link ? { link } : {} };
+        storySpec = { page_id, video_data: videoData };
+      } else {
+        const linkData: any = { message: message || '' };
+        if (link) linkData.link = link;
+        if (headline) linkData.name = headline;
+        if (image_hash) linkData.image_hash = image_hash;
+        if (call_to_action_type) linkData.call_to_action = { type: call_to_action_type, value: link ? { link } : {} };
+        storySpec = { page_id, link_data: linkData };
+      }
       const creativeFields = {
         name: ad_name || 'Ad Creative',
-        object_story_spec: { page_id, link_data: linkData },
+        object_story_spec: storySpec,
       };
       const cr2 = await fetch(`${GRAPH}/${actId}/adcreatives`, {
         method: 'POST',
