@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Loader2, ArrowUp, ArrowDown, MessageSquare } from 'lucide-react';
 
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
@@ -32,7 +33,7 @@ const last10 = (p) => {
   return d.length >= 10 ? d.slice(-10) : d;
 };
 
-export default function CustomerDetailDialog({ customer, onClose }) {
+export default function CustomerDetailDialog({ customer, onClose, onMessage }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sortField, setSortField] = useState('order_date');
@@ -78,7 +79,21 @@ export default function CustomerDetailDialog({ customer, onClose }) {
     <Dialog open={!!customer} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{customer.name || 'Customer'}</DialogTitle>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <DialogTitle>{customer.name || 'Customer'}</DialogTitle>
+            </div>
+            {customer.phone && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0"
+                onClick={() => { if (typeof onMessage === 'function') onMessage(customer); }}
+              >
+                <MessageSquare className="h-4 w-4" /> Message
+              </Button>
+            )}
+          </div>
           <DialogDescription className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
             {customer.email && <span>{customer.email}</span>}
             {customer.phone && <span>{customer.phone}</span>}
