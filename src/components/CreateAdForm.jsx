@@ -50,6 +50,9 @@ export default function CreateAdForm({ account }) {
   const [audiences, setAudiences] = useState([]);
   const [audienceId, setAudienceId] = useState('');
   const [audienceKind, setAudienceKind] = useState('');
+  const [storeLocations, setStoreLocations] = useState([]);
+  const [selectedLocations, setSelectedLocations] = useState([]);
+  const [radius, setRadius] = useState('4');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -59,6 +62,10 @@ export default function CreateAdForm({ account }) {
   useEffect(() => {
     if (!account) return;
     (async () => {
+      try {
+        const locs = await base44.entities.Location.list();
+        setStoreLocations(locs || []);
+      } catch (_e) { /* locations optional */ }
       try {
         const res = await base44.functions.invoke('metaAds', {
           action: 'list_audiences',
@@ -90,6 +97,10 @@ export default function CreateAdForm({ account }) {
         call_to_action_type: form.cta,
         audience_id: audienceId || null,
         audience_kind: audienceKind || null,
+        locations: selectedLocations.map((name) => {
+          const loc = storeLocations.find((l) => l.name === name);
+          return loc ? { address: loc.address, city: loc.city, province: loc.province, postal_code: loc.postal_code, country: loc.country, radius: parseFloat(radius) || 4 } : null;
+        }).filter(Boolean),
         assets: assets.map((a) => ({ kind: a.kind, base64: a.base64, url: a.url, name: a.name, ratio: a.ratio })),
       });
       setResult(res.data || res);
@@ -227,6 +238,56 @@ export default function CreateAdForm({ account }) {
               </SelectContent>
             </Select>
           </div>
+
+          {storeLocations.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Target around store locations (optional)</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Select stores to target a {radius || 4}-mile radius around each exact address.
+                More precise than province-wide targeting.
+              </p>
+              <div className="flex items-center gap-2 mb-2">
+                <Label className="text-xs">Radius (miles)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="50"
+                  step="1"
+                  value={radius}
+                  onChange={(e) => setRadius(e.target.value)}
+                  className="w-20"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {storeLocations.map((loc) => {
+                  const selected = selectedLocations.includes(loc.name);
+                  return (
+                    <button
+                      key={loc.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedLocations((prev) =>
+                          prev.includes(loc.name)
+                            ? prev.filter((n) => n !== loc.name)
+                            : [...prev, loc.name]
+                        );
+                      }}
+                      className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                        selected
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-input bg-background hover:bg-accent'
+                      }`}
+                    >
+                      {loc.name}
+                      <span className="text-xs opacity-70">
+                        {loc.city}, {loc.province}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <MultiAssetUploader assets={assets} onAssets={setAssets} />
 

@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
       const {
         account_id, campaign_name, objective, daily_budget, ad_name,
         headline, message, link, call_to_action_type, audience_id, audience_kind,
-        assets,
+        assets, locations,
       } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
@@ -234,7 +234,34 @@ Deno.serve(async (req) => {
         asBody.set('optimization_goal', objMap[objective] || 'LINK_CLICKS');
         asBody.set('daily_budget', String(Math.round(Number(daily_budget || 20) * 100)));
         asBody.set('status', 'PAUSED');
-        asBody.set('targeting', JSON.stringify({ geo_locations: { countries: ['CA'] }, ...(audience_id ? { custom_audiences: [{ id: audience_id }] } : {}) }));
+        let targeting: any = { geo_locations: { countries: ['CA'] } };
+        if (Array.isArray(locations) && locations.length) {
+          const custom_locations: any[] = [];
+          for (const loc of locations) {
+            const addr = [loc.address, loc.city, loc.province, loc.postal_code, loc.country || 'Canada']
+              .filter(Boolean).join(', ');
+            if (!addr) continue;
+            try {
+              const gres = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addr)}`,
+                { headers: { 'User-Agent': 'AdPilot/1.0 (hellcrust-ads)' } },
+              );
+              const gdata: any = await gres.json();
+              if (gdata && gdata[0]) {
+                custom_locations.push({
+                  latitude: gdata[0].lat,
+                  longitude: gdata[0].lon,
+                  radius: loc.radius || 4,
+                  distance_unit: 'mile',
+                });
+              }
+            } catch (_e) { /* skip unresolved address */ }
+          }
+          if (custom_locations.length) targeting = { geo_locations: { custom_locations } };
+        } else if (audience_id) {
+          targeting = { geo_locations: { countries: ['CA'] }, custom_audiences: [{ id: audience_id }] };
+        }
+        asBody.set('targeting', JSON.stringify(targeting));
         const asRes = await fetch(`${GRAPH}/${actId}/adsets`, { method: 'POST', headers: h, body: asBody });
         const asData: any = await asRes.json();
         if (asData.error) return Response.json({ error: 'adset: ' + asData.error.message, campaign_id }, { status: 502 });
