@@ -258,7 +258,8 @@ export default function MultiAssetUploader({ assets, onAssets }) {
                   {items.map(({ a, i }) => (
                     <div
                       key={i}
-                      className="relative w-28 h-28 rounded-md overflow-hidden border bg-muted cursor-zoom-in"
+                      className="relative h-28 rounded-md overflow-hidden border bg-muted cursor-zoom-in"
+                      style={{ aspectRatio: a.ratio.replace(':', ' / ') }}
                       onDoubleClick={() => setPreview(a)}
                       title="Double-click to view"
                     >
