@@ -62,8 +62,21 @@ export default function CustomerSms() {
   const loadReplies = async () => {
     setLoadingReplies(true);
     try {
-      const records = await base44.entities.SmsReply.list('-received_at', 50);
-      setReplies(records || []);
+      const records = await base44.entities.SmsReply.list('-received_at', 200);
+      // group by normalized phone — one row per customer conversation (latest message)
+      const byPhone = new Map();
+      for (const r of records || []) {
+        const key = normPhone(r.from_phone);
+        if (!key) continue;
+        const existing = byPhone.get(key);
+        if (!existing || new Date(r.received_at || 0).getTime() > new Date(existing.received_at || 0).getTime()) {
+          byPhone.set(key, { ...r, _count: (existing?._count || 0) + 1 });
+        } else {
+          existing._count = (existing._count || 1) + 1;
+        }
+      }
+      const grouped = Array.from(byPhone.values()).sort((a, b) => new Date(b.received_at || 0).getTime() - new Date(a.received_at || 0).getTime());
+      setReplies(grouped);
     } catch (e) {
       toast({ variant: 'destructive', title: 'Failed to load replies', description: e.response?.data?.error || e.message });
     } finally {
@@ -303,20 +316,22 @@ export default function CustomerSms() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="text-left p-2 font-medium">Received</th>
+                    <th className="text-left p-2 font-medium">Last reply</th>
                     <th className="text-left p-2 font-medium">From</th>
                     <th className="text-left p-2 font-medium">Customer</th>
-                    <th className="text-left p-2 font-medium">Message</th>
+                    <th className="text-left p-2 font-medium">Latest message</th>
+                    <th className="text-left p-2 font-medium">Msgs</th>
                     <th className="w-20 p-2"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {replies.map((r) => (
-                    <tr key={r.id} className="border-t cursor-pointer hover:bg-muted/40" onClick={() => openChat(r)}>
+                    <tr key={normPhone(r.from_phone)} className="border-t cursor-pointer hover:bg-muted/40" onClick={() => openChat(r)}>
                       <td className="p-2 text-xs text-muted-foreground">{r.received_at ? new Date(r.received_at).toLocaleString() : '—'}</td>
                       <td className="p-2 text-xs">{r.from_phone}</td>
                       <td className="p-2">{r.customer_name || '—'}</td>
                       <td className="p-2 max-w-xs truncate">{r.body}</td>
+                      <td className="p-2"><Badge variant="secondary">{r._count || 1}</Badge></td>
                       <td className="p-2"><Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openChat(r); }}><MessageSquare className="h-3 w-3" /> Open</Button></td>
                     </tr>
                   ))}
