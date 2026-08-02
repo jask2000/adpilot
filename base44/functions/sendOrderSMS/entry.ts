@@ -39,13 +39,14 @@ export default async function(req) {
       }
       return null;
     };
-    const sendSms = async (to, text) => {
+    const sendSms = async (to, text, mediaUrl) => {
       const dest = normalizePhone(to);
       if (!dest) throw new Error('Invalid phone number: ' + to);
       const form = new URLSearchParams();
       form.set('To', dest);
       form.set('From', from);
       form.set('Body', text);
+      if (mediaUrl) form.set('MediaUrl', mediaUrl);
       const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
         method: 'POST',
         headers: { 'Authorization': 'Basic ' + btoa(`${sid}:${token}`) },
@@ -81,7 +82,7 @@ export default async function(req) {
 
     if (action === 'send') {
       if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-      const { recipients, message, date } = body;
+      const { recipients, message, date, media_url } = body;
       if (!Array.isArray(recipients) || !recipients.length) return Response.json({ error: 'recipients required' }, { status: 400 });
       if (!message) return Response.json({ error: 'message required' }, { status: 400 });
       const campaignDate = date || yesterdayStr();
@@ -89,7 +90,7 @@ export default async function(req) {
       for (const r of recipients) {
         if (!r.customer_phone) { results.push({ order_number: r.order_number, status: 'failed', error: 'no phone' }); continue; }
         try {
-          await sendSms(r.customer_phone, message);
+          await sendSms(r.customer_phone, message, media_url);
           await base44.asServiceRole.entities.SmsMessage.create({
             order_number: r.order_number, customer_name: r.customer_name, customer_phone: r.customer_phone,
             store_name: r.store_name, message, campaign_date: campaignDate, status: 'sent',

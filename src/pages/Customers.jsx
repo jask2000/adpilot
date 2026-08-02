@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Contact, RefreshCw, Loader2, Search, MessageSquare, ArrowUp, ArrowDown } from 'lucide-react';
+import { Contact, RefreshCw, Loader2, Search, MessageSquare, ArrowUp, ArrowDown, MessageCircle, ImageIcon } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { Checkbox } from '@/components/ui/checkbox';
 import CustomerDetailDialog from '@/components/CustomerDetailDialog';
 import CustomerSmsDialog from '@/components/CustomerSmsDialog';
+import BulkMessageDialog from '@/components/BulkMessageDialog';
 
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
@@ -39,6 +41,8 @@ export default function Customers() {
   const [lastOrderOp, setLastOrderOp] = useState('any');
   const [lastOrderMonths, setLastOrderMonths] = useState('3');
   const [storeFilter, setStoreFilter] = useState('any');
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkMode, setBulkMode] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -111,6 +115,15 @@ export default function Customers() {
     if (sortField === f) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     else { setSortField(f); setSortDir(f === 'name' ? 'asc' : 'desc'); }
   };
+
+  const toggle = (id) => setSelectedIds((prev) => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const allSelected = filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id));
+  const toggleAll = () => setSelectedIds(allSelected ? new Set() : new Set(filtered.map((c) => c.id)));
+  const bulkRecipients = customers.filter((c) => selectedIds.has(c.id));
 
   return (
     <div className="p-6 space-y-6 max-w-6xl">
@@ -218,6 +231,18 @@ export default function Customers() {
           </div>
         </CardHeader>
         <CardContent>
+          {selectedIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mb-4 p-3 rounded-md bg-muted/60 border">
+              <span className="text-sm font-medium">{selectedIds.size} selected</span>
+              <Button size="sm" variant="outline" onClick={() => setBulkMode('sms')}>
+                <MessageCircle className="h-3.5 w-3.5" /> SMS to all
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setBulkMode('mms')}>
+                <ImageIcon className="h-3.5 w-3.5" /> MMS to all
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear selection</Button>
+            </div>
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
           ) : customers.length === 0 ? (
@@ -232,6 +257,9 @@ export default function Customers() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
+                    <th className="p-2 w-8">
+                      <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all" />
+                    </th>
                     <Th field="name" sortField={sortField} sortDir={sortDir} onSort={(f) => toggleSort(f)}>Customer</Th>
                     <th className="text-left p-2 font-medium">Contact</th>
                     <th className="text-right p-2 font-medium">Orders</th>
@@ -245,6 +273,9 @@ export default function Customers() {
                 <tbody>
                   {filtered.map((c) => (
                     <tr key={c.id} className="border-t cursor-pointer hover:bg-muted/40" onClick={() => setSelected(c)}>
+                      <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggle(c.id)} aria-label="Select" />
+                      </td>
                       <td className="p-2 font-medium">{c.name || '—'}</td>
                       <td className="p-2 text-xs">
                         <div>{c.email || '—'}</div>
@@ -272,6 +303,7 @@ export default function Customers() {
 
       <CustomerDetailDialog customer={selected} onClose={() => setSelected(null)} />
       <CustomerSmsDialog customer={smsTarget} onClose={() => setSmsTarget(null)} />
+      <BulkMessageDialog recipients={bulkMode ? bulkRecipients : null} mode={bulkMode} onClose={() => setBulkMode(null)} />
     </div>
   );
 }
