@@ -55,9 +55,14 @@ function parseOrderEmail(text) {
   const name = (text.match(/Customer Name:\s*([^\n\r]+)/i) || [])[1]?.trim() || '';
   const phone = (text.match(/Phone:\s*([\d\s\-()]+)/i) || [])[1]?.trim() || '';
   const email = (text.match(/Email:\s*([^\s]+)/i) || [])[1]?.trim() || '';
-  const balance = (text.match(/Balance Owing:\s*\$?([\d.,]+)/i) || [])[1]
-    || (text.match(/Total:\s*\$?([\d.,]+)/i) || [])[1]
-    || (text.match(/\$([\d.,]+\.\d{2})/g) || []).pop()?.replace(/[^\d.]/g, '');
+  // "Balance Owing" is $0.00 for paid orders (it's the remaining balance, not
+  // the total). Prefer "Order Total" / "Amount" (the payment), then fall back to
+  // Balance Owing for genuinely unpaid orders, then to the last dollar figure.
+  const cleanText = text.replace(/&nbsp;/g, ' ');
+  const balance = (cleanText.match(/Order\s+Total:\s*\$?([\d.,]+)/i) || [])[1]
+    || (cleanText.match(/\bAmount:\s*\$?([\d.,]+)/i) || [])[1]
+    || (cleanText.match(/Balance\s+Owing:\s*\$?([\d.,]+)/i) || [])[1]
+    || (cleanText.match(/\$([\d.,]+\.\d{2})/g) || []).pop()?.replace(/[^\d.]/g, '');
   const amount = balance ? parseFloat(String(balance).replace(/,/g, '')) : 0;
   const orderType = (text.match(/Online Order\s*\(([^)]+)\)/i) || [])[1]?.trim() || '';
   const storeMatch = text.match(/^(.*HELLCRUST.*)$/im);
