@@ -98,6 +98,7 @@ export default function Customers() {
     .sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1;
       if (sortField === 'name') return (String(a.name || '').localeCompare(String(b.name || ''))) * dir;
+      if (sortField === 'total_orders') return ((Number(a.total_orders) || 0) - (Number(b.total_orders) || 0)) * dir;
       if (sortField === 'last_order') {
         return ((new Date(a.last_order_date || 0).getTime()) - (new Date(b.last_order_date || 0).getTime())) * dir;
       }
@@ -178,6 +179,7 @@ export default function Customers() {
                 <SelectTrigger className="w-40 h-8"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="name">Name (A–Z)</SelectItem>
+                  <SelectItem value="total_orders">Total orders</SelectItem>
                   <SelectItem value="last_order">Last order date</SelectItem>
                   <SelectItem value="total_spent">Total spent</SelectItem>
                 </SelectContent>
@@ -262,7 +264,7 @@ export default function Customers() {
                     </th>
                     <Th field="name" sortField={sortField} sortDir={sortDir} onSort={(f) => toggleSort(f)}>Customer</Th>
                     <th className="text-left p-2 font-medium">Contact</th>
-                    <th className="text-right p-2 font-medium">Orders</th>
+                    <Th field="total_orders" sortField={sortField} sortDir={sortDir} onSort={(f) => toggleSort(f)} className="text-right">Orders</Th>
                     <Th field="total_spent" sortField={sortField} sortDir={sortDir} onSort={(f) => toggleSort(f)} className="text-right">Total spent</Th>
                     <th className="text-right p-2 font-medium">Avg order</th>
                     <th className="text-left p-2 font-medium">Last store</th>
