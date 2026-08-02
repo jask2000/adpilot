@@ -296,7 +296,7 @@ export default function CustomerSms() {
           {history.length === 0 ? (
             <p className="text-sm text-muted-foreground">No SMS sent yet.</p>
           ) : (
-            <div className="rounded-md border overflow-hidden">
+            <div className="rounded-md border overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
@@ -315,7 +315,7 @@ export default function CustomerSms() {
                       <td className="p-2 text-xs text-muted-foreground">{h.sent_at ? new Date(h.sent_at).toLocaleString() : '—'}</td>
                       <td className="p-2">{h.customer_name || '—'}</td>
                       <td className="p-2 text-xs">{h.customer_phone}</td>
-                      <td className="p-2 max-w-xs truncate text-muted-foreground">{h.message}</td>
+                      <td className="p-2 max-w-[160px] truncate text-muted-foreground">{h.message}</td>
                       <td className="p-2">{h.status === 'sent' ? <Badge>sent</Badge> : <Badge variant="destructive">failed</Badge>}</td>
                       <td className="p-2"><Badge variant="outline">{h.source}</Badge></td>
                       <td className="p-2">
