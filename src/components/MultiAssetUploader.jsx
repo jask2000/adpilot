@@ -9,6 +9,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { base44 } from '@/api/base44Client';
 import { getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
+import { appendLogoOutro } from '@/lib/videoOutro';
+
+const LOGO_STORAGE_KEY = 'hellcrust_logo_url';
 
 const VIDEO_RATIOS = [
   { value: '9:16', ar: '9:16', label: '9:16 (Stories / Reels)' },
@@ -27,6 +30,56 @@ export default function MultiAssetUploader({ assets, onAssets }) {
   const [tab, setTab] = useState('img-1:1');
   const [useStartImage, setUseStartImage] = useState(false);
   const [startImageIdx, setStartImageIdx] = useState('');
+  const [logoUrl, setLogoUrl] = useState(() => {
+    try { return localStorage.getItem(LOGO_STORAGE_KEY) || ''; } catch (_) { return ''; }
+  });
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  const uploadLogo = async (file) => {
+    if (!file) return;
+    setLogoUploading(true);
+    try {
+      const up = await base44.integrations.Core.UploadFile({ file });
+      const url = up.file_url;
+      setLogoUrl(url);
+      try { localStorage.setItem(LOGO_STORAGE_KEY, url); } catch (_) {}
+    } catch (e) {
+      setGenError('Logo upload failed: ' + ((e && e.message) || 'unknown'));
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const removeLogo = () => {
+    setLogoUrl('');
+    try { localStorage.removeItem(LOGO_STORAGE_KEY); } catch (_) {}
+  };
+
+  // Composite the brand logo outro onto a freshly generated video.
+  const addVideoAsset = async (src, isBase64, baseName) => {
+    if (logoUrl) {
+      setGenError(null);
+      try {
+        const composited = await appendLogoOutro(src, logoUrl, videoRatio);
+        onAssets([
+          ...assets,
+          { ratio: videoRatio, kind: 'video', base64: composited, name: baseName + '_logo.webm' },
+        ]);
+      } catch (e) {
+        // If compositing fails, fall back to the raw generated video.
+        setGenError('Logo outro failed — saved raw video: ' + ((e && e.message) || 'unknown'));
+        onAssets([
+          ...assets,
+          { ratio: videoRatio, kind: 'video', [isBase64 ? 'base64' : 'url']: src, name: baseName + '.mp4' },
+        ]);
+      }
+    } else {
+      onAssets([
+        ...assets,
+        { ratio: videoRatio, kind: 'video', [isBase64 ? 'base64' : 'url']: src, name: baseName + '.mp4' },
+      ]);
+    }
+  };
 
   // One tab per image ratio + one per video ratio.
   const TABS = [
@@ -93,10 +146,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             });
             const data = res?.data;
             if (!data?.base64) throw new Error(data?.error || 'Veo returned no video');
-            onAssets([
-              ...assets,
-              { ratio: videoRatio, kind: 'video', base64: data.base64, name: 'veo_img2video_' + videoRatio.replace(':', 'x') + '.mp4' },
-            ]);
+            await addVideoAsset(data.base64, true, 'veo_img2video_' + videoRatio.replace(':', 'x'));
             setVideoPrompt('');
             return;
           }
@@ -108,10 +158,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
         duration: 6,
         aspect_ratio: videoRatio,
       });
-      onAssets([
-        ...assets,
-        { ratio: videoRatio, kind: 'video', url: vr.url, name: 'ai_video_' + videoRatio.replace(':', 'x') + '.mp4' },
-      ]);
+      await addVideoAsset(vr.url, false, 'ai_video_' + videoRatio.replace(':', 'x'));
       setVideoPrompt('');
     } catch (e) {
       setGenError((e && e.message) || 'Video generation failed');
@@ -232,6 +279,45 @@ export default function MultiAssetUploader({ assets, onAssets }) {
           <div className="flex items-center gap-2 text-sm font-medium">
             <Film className="h-4 w-4" /> AI video from text prompt
           </div>
+
+          {/* Brand logo — appended as an outro card on every generated video */}
+          <div className="flex items-center gap-3 flex-wrap rounded-md bg-background/60 p-2 border border-border/50">
+            <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <ImagePlus className="h-3.5 w-3.5" /> Brand logo outro:
+            </span>
+            {logoUrl ? (
+              <div className="flex items-center gap-2">
+                <img src={logoUrl} alt="Logo" className="h-8 w-8 object-contain rounded border bg-white/50" />
+                <span className="text-xs text-muted-foreground">Logo will appear at the end</span>
+                <label className="cursor-pointer">
+                  <span className="text-xs text-primary hover:underline">Replace</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { uploadLogo(e.target.files?.[0]); e.target.value = ''; }}
+                  />
+                </label>
+                <button type="button" className="text-xs text-destructive hover:underline" onClick={removeLogo}>
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <label className="cursor-pointer">
+                <span className="inline-flex items-center gap-1.5 text-xs rounded-md border border-input bg-transparent px-2.5 py-1.5 hover:bg-accent">
+                  {logoUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  {logoUploading ? 'Uploading…' : 'Upload brand logo'}
+                </span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => { uploadLogo(e.target.files?.[0]); e.target.value = ''; }}
+                />
+              </label>
+            )}
+          </div>
+
           <Textarea
             placeholder="Describe the motion, e.g. 'steam rising off a fresh Hellcrust pizza, slow push-in, melted cheese stretch'"
             value={videoPrompt}
@@ -277,7 +363,9 @@ export default function MultiAssetUploader({ assets, onAssets }) {
               {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
               {busy ? 'Generating video…' : 'Generate video'}
             </Button>
-            <span className="text-[11px] text-muted-foreground">~30–60s · 6s clip · uses AI credits</span>
+            <span className="text-[11px] text-muted-foreground">
+              ~30–60s · 6s clip · uses AI credits{logoUrl ? ' · +logo outro' : ''}
+            </span>
           </div>
         </div>
       )}
