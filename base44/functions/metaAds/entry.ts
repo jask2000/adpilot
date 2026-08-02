@@ -185,7 +185,7 @@ Deno.serve(async (req) => {
     if (action === 'create_ad_multi') {
       const {
         account_id, campaign_name, objective, daily_budget, ad_name,
-        headline, message, link, call_to_action_type, audience_id, audience_kind,
+        headline, message, link, call_to_action_type, audience_id, audience_kind, audience_ids,
         assets, locations,
       } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
@@ -258,6 +258,8 @@ Deno.serve(async (req) => {
             } catch (_e) { /* skip unresolved address */ }
           }
           if (custom_locations.length) targeting = { geo_locations: { custom_locations } };
+        } else if (Array.isArray(audience_ids) && audience_ids.length) {
+          targeting = { geo_locations: { countries: ['CA'] }, custom_audiences: audience_ids.map((id: string) => ({ id })) };
         } else if (audience_id) {
           targeting = { geo_locations: { countries: ['CA'] }, custom_audiences: [{ id: audience_id }] };
         }

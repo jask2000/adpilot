@@ -48,8 +48,7 @@ export default function CreateAdForm({ account }) {
   });
   const [assets, setAssets] = useState([]);
   const [audiences, setAudiences] = useState([]);
-  const [audienceId, setAudienceId] = useState('');
-  const [audienceKind, setAudienceKind] = useState('');
+  const [selectedAudienceIds, setSelectedAudienceIds] = useState([]);
   const [storeLocations, setStoreLocations] = useState([]);
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [radius, setRadius] = useState('4');
@@ -95,8 +94,7 @@ export default function CreateAdForm({ account }) {
         message: form.message,
         link: form.link,
         call_to_action_type: form.cta,
-        audience_id: audienceId || null,
-        audience_kind: audienceKind || null,
+        audience_ids: selectedAudienceIds.length ? selectedAudienceIds : null,
         locations: selectedLocations.map((name) => {
           const loc = storeLocations.find((l) => l.name === name);
           return loc ? { address: loc.address, city: loc.city, province: loc.province, postal_code: loc.postal_code, country: loc.country, radius: parseFloat(radius) || 4 } : null;
@@ -211,32 +209,38 @@ export default function CreateAdForm({ account }) {
           </div>
 
           <div className="space-y-1.5">
-            <Label>Target audience (optional)</Label>
-            <Select
-              value={audienceId || 'none'}
-              onValueChange={(v) => {
-                if (v === 'none') {
-                  setAudienceId('');
-                  setAudienceKind('');
-                  return;
-                }
-                setAudienceId(v);
-                const a = audiences.find((x) => x.id === v);
-                setAudienceKind(a?.kind || '');
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="None — default geo targeting" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None — default geo targeting</SelectItem>
-                {audiences.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name} ({a.kind === 'saved' ? 'Saved' : a.subtype || 'Custom'})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Target audiences (optional)</Label>
+            <p className="text-xs text-muted-foreground">
+              Select one or more audiences — your ad will reach people in any of them (union).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {audiences.map((a) => {
+                const selected = selectedAudienceIds.includes(a.id);
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedAudienceIds((prev) =>
+                        prev.includes(a.id)
+                          ? prev.filter((x) => x !== a.id)
+                          : [...prev, a.id]
+                      );
+                    }}
+                    className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                      selected
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-input bg-background hover:bg-accent'
+                    }`}
+                  >
+                    {a.name}
+                    <span className="text-xs opacity-70">
+                      {a.kind === 'saved' ? 'Saved' : a.subtype || 'Custom'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {storeLocations.length > 0 && (
