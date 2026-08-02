@@ -294,12 +294,12 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             <img
               src={preview.base64 || preview.url}
               alt={preview.name}
-              className="mx-auto max-w-full max-h-[80vh] w-auto h-auto rounded-md object-contain"
+              className="justify-self-center mx-auto max-w-full max-h-[80vh] w-auto h-auto rounded-md"
             />
           ) : preview?.kind === 'video' ? (
             <video
               src={preview.base64 || preview.url}
-              className="mx-auto max-w-full max-h-[80vh] w-auto h-auto rounded-md"
+              className="justify-self-center mx-auto max-w-full max-h-[80vh] w-auto h-auto rounded-md"
               controls
               autoPlay
             />
