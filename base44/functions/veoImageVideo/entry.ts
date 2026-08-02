@@ -38,6 +38,9 @@ export default async function(req) {
     if (!imgResp.ok) return Response.json({ error: 'Could not fetch source image' }, { status: 502 });
     const imgBuf = await imgResp.arrayBuffer();
     const imgB64 = await bufferToBase64(imgBuf);
+    // Veo REQUIRES mimeType to recognize the image; without it the model
+    // silently ignores the image and falls back to text-only generation.
+    const imgMime = (imgResp.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
 
     const ar = ASPECT_MAP[ratio] || '16:9';
     const dur = Math.min(Math.max(Number(duration) || 6, 4), 8);
@@ -51,7 +54,7 @@ export default async function(req) {
           instances: [
             {
               prompt,
-              image: { bytesBase64Encoded: imgB64 },
+              image: { bytesBase64Encoded: imgB64, mimeType: imgMime },
             },
           ],
           parameters: {
@@ -70,8 +73,8 @@ export default async function(req) {
     const opName = predictData.name;
     if (!opName) return Response.json({ error: 'No operation returned by Veo' }, { status: 502 });
 
-    // Poll the long-running operation (up to ~120s).
-    const deadline = Date.now() + 120000;
+    // Poll the long-running operation (up to ~150s).
+    const deadline = Date.now() + 150000;
     let videoB64 = null;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 8000));
@@ -83,8 +86,20 @@ export default async function(req) {
       const pollData = await pollResp.json();
       if (pollData.done) {
         if (pollData.error) return Response.json({ error: 'Veo failed: ' + (pollData.error.message || 'unknown') }, { status: 502 });
-        const samples = pollData.response?.generatedSamples || [];
-        videoB64 = samples[0]?.video?.bytesBase64Encoded;
+        // Veo returns the video either as base64 bytes or as a download URI.
+        const genResp = pollData.response?.generateVideoResponse || pollData.response || {};
+        const samples = genResp.generatedSamples || [];
+        const sample = samples[0];
+        if (sample?.video?.bytesBase64Encoded) {
+          videoB64 = sample.video.bytesBase64Encoded;
+        } else if (sample?.video?.uri) {
+          // Download the video from the URI using the API key.
+          const dlResp = await fetch(sample.video.uri + '?key=' + apiKey);
+          if (dlResp.ok) {
+            const dlBuf = await dlResp.arrayBuffer();
+            videoB64 = await bufferToBase64(dlBuf);
+          }
+        }
         if (videoB64) break;
         return Response.json({ error: 'Veo returned no video samples' }, { status: 502 });
       }
