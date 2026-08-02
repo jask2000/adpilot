@@ -15,7 +15,8 @@ export default async function(req) {
 
     const sid = secrets.get('TWILIO_ACCOUNT_SID');
     const token = secrets.get('TWILIO_AUTH_TOKEN');
-    const from = secrets.get('TWILIO_FROM_NUMBER');
+    const rawFrom = secrets.get('TWILIO_FROM_NUMBER');
+    const from = rawFrom ? (String(rawFrom).trim().startsWith('+') ? String(rawFrom).trim() : '+' + String(rawFrom).replace(/\D/g, '')) : null;
     if (!sid || !token || !from) return Response.json({ error: 'Twilio credentials not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER in the app environment variables.' }, { status: 500 });
 
     const normalizePhone = (p) => {
