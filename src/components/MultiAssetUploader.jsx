@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { base44 } from '@/api/base44Client';
-import { cropToRatio, fitToRatio, getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
+import { getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
 
 const VIDEO_RATIOS = [
   { value: '9:16', ar: '9:16', label: '9:16 (Stories / Reels)' },
@@ -106,22 +106,8 @@ export default function MultiAssetUploader({ assets, onAssets }) {
           prompt,
           existing_image_urls: [srcUrl],
         });
-        // GenerateImage can't enforce an aspect ratio, so crop the result to
-        // the target ratio — the stored asset then genuinely matches its label.
-        let asset = { ratio: r.value, kind: 'image', url: gi.url, name: 'ai_' + r.value.replace(':', 'x') + '.jpg' };
-        try {
-          const resp = await fetch(gi.url);
-          const blob = await resp.blob();
-          const dataUrl = await new Promise((res, rej) => {
-            const fr = new FileReader();
-            fr.onload = () => res(fr.result);
-            fr.onerror = rej;
-            fr.readAsDataURL(blob);
-          });
-          const fitted = await fitToRatio(dataUrl, r.w, r.h);
-          asset = { ratio: r.value, kind: 'image', base64: fitted, name: 'ai_' + r.value.replace(':', 'x') + '.jpg' };
-        } catch (_e) { /* keep original url if fetch/crop fails */ }
-        generated.push(asset);
+        // Use the AI's native re-composition directly — no letterbox bars.
+        generated.push({ ratio: r.value, kind: 'image', url: gi.url, name: 'ai_' + r.value.replace(':', 'x') + '.jpg' });
       }
 
       // 3. Replace existing image assets with the generated set (keep any videos).
