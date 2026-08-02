@@ -1049,10 +1049,22 @@ Deno.serve(async (req) => {
       const { account_id } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
-      const r = await fetch(`${GRAPH}/${actId}/advideos?fields=id,title,length,thumbnail_url,created_time,permalink_url&limit=200`, { headers });
+      const r = await fetch(`${GRAPH}/${actId}/advideos?fields=id,title,length,thumbnail_url,created_time,permalink_url,format&limit=200`, { headers });
       const data: any = await r.json();
       if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
-      return Response.json({ videos: data.data || [] });
+      // Extract pixel dimensions from the largest available format so the UI
+      // can display the aspect ratio badge.
+      const videos = (data.data || []).map((v: any) => {
+        let w = 0, h = 0;
+        if (Array.isArray(v.format) && v.format.length) {
+          for (const f of v.format) {
+            if ((f.width || 0) > w) { w = f.width; h = f.height || h; }
+          }
+        }
+        const { format, ...rest } = v;
+        return { ...rest, width: w, height: h };
+      });
+      return Response.json({ videos });
     }
 
     if (action === 'delete_video') {

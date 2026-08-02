@@ -62,9 +62,20 @@ export default function Media() {
 
   const isUsed = (hash) => usedHashes.has(hash);
 
-  const ratioLabel = (m) => {
-    if (!m.width || !m.height) return '';
-    const w = m.width, h = m.height;
+  const ratioLabel = (w, h) => {
+    if (!w || !h) return '';
+    const target = w / h;
+    const standards = [
+      [1, 1], [4, 5], [5, 4], [9, 16], [16, 9], [4, 3], [3, 4],
+      [2, 3], [3, 2], [1.91, 1], [1, 1.91], [2, 1], [1, 2],
+    ];
+    let best = null;
+    let bestDiff = Infinity;
+    for (const [rw, rh] of standards) {
+      const diff = Math.abs(target - rw / rh);
+      if (diff < bestDiff) { bestDiff = diff; best = `${rw}:${rh}`; }
+    }
+    if (bestDiff < 0.04) return best;
     const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
     const g = gcd(w, h);
     return `${w / g}:${h / g}`;
@@ -365,9 +376,9 @@ export default function Media() {
                       loading="lazy"
                       className="h-full w-full object-cover"
                     />
-                    {ratioLabel(m) && (
+                    {ratioLabel(m.width, m.height) && (
                       <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                        {ratioLabel(m)}
+                        {ratioLabel(m.width, m.height)}
                       </span>
                     )}
                     {used ? (
@@ -479,9 +490,14 @@ export default function Media() {
                         <Film className="h-8 w-8" />
                       </div>
                     )}
-                    <span className="absolute top-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                    <span className="absolute top-1.5 left-9 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
                       VIDEO
                     </span>
+                    {ratioLabel(v.width, v.height) && (
+                      <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                        {ratioLabel(v.width, v.height)}
+                      </span>
+                    )}
                     {v.length != null && (
                       <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
                         {fmtDuration(v.length)}
