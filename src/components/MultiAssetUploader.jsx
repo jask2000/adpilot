@@ -163,7 +163,12 @@ export default function MultiAssetUploader({ assets, onAssets }) {
       await addVideoAsset(vr.url, false, 'ai_video_' + videoRatio.replace(':', 'x'));
       setVideoPrompt('');
     } catch (e) {
-      setGenError((e && e.message) || 'Video generation failed');
+      const msg = (e && e.message) || 'Video generation failed';
+      if (/429|rate.?limit|quota|RESOURCE_EXHAUSTED/i.test(msg)) {
+        setGenError('Google AI Studio quota or rate limit exceeded — Veo is a paid model. Please top up your AI Studio billing credits at aistudio.google.com and try again in a minute.');
+      } else {
+        setGenError(msg);
+      }
     } finally {
       setBusy(false);
     }

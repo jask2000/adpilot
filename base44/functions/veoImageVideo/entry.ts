@@ -94,7 +94,11 @@ export default async function(req: Request) {
 
     if ((operation as any).error) {
       console.error('veoImageVideo: operation error:', JSON.stringify((operation as any).error));
-      return Response.json({ error: 'Veo failed: ' + ((operation as any).error?.message || 'unknown') }, { status: 502 });
+      const opMsg = (operation as any).error?.message || 'unknown';
+      if (/429|rate.?limit|quota|RESOURCE_EXHAUSTED/i.test(opMsg)) {
+        return Response.json({ error: 'Google AI Studio quota or rate limit exceeded (429). Veo is a paid model — please top up your AI Studio billing credits and wait a moment before retrying. (' + opMsg + ')' }, { status: 429 });
+      }
+      return Response.json({ error: 'Veo failed: ' + opMsg }, { status: 502 });
     }
 
     const generatedVideos = (operation as any).response?.generatedVideos || [];
@@ -135,6 +139,10 @@ export default async function(req: Request) {
         if (parsed.error.code === 429) status = 429;
       }
     } catch (_) { /* not JSON, use raw message */ }
+    if (status === 429 || /429|rate.?limit|quota|RESOURCE_EXHAUSTED/i.test(msg)) {
+      status = 429;
+      msg = 'Google AI Studio quota or rate limit exceeded (429). Veo is a paid model — please top up your AI Studio billing credits and wait a moment before retrying. (' + msg + ')';
+    }
     return Response.json({ error: msg }, { status });
   }
 }
