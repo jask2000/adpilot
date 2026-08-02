@@ -6,6 +6,17 @@ import { Loader2, ArrowUp, ArrowDown } from 'lucide-react';
 
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
+// order_date may be stored as a raw email string ("Monday, July 28, 2025 3:45 PM")
+// which the browser can't parse — normalize it.
+const toDate = (v) => {
+  if (!v) return null;
+  const d = new Date(v);
+  if (!isNaN(d.getTime())) return d;
+  const stripped = String(v).replace(/^\w+,\s*/, '').replace(/\s*@\s*/, ' ').trim();
+  const d2 = new Date(stripped);
+  return isNaN(d2.getTime()) ? null : d2;
+};
+
 // Match the same normalization used by syncCustomers so grouping == lookup.
 const normEmail = (e) => (e ? String(e).trim().toLowerCase() : '');
 const normPhone = (p) => {
@@ -58,7 +69,7 @@ export default function CustomerDetailDialog({ customer, onClose }) {
     const dir = sortDir === 'asc' ? 1 : -1;
     if (sortField === 'store_name') return String(a.store_name || '').localeCompare(String(b.store_name || '')) * dir;
     if (sortField === 'amount') return ((Number(a.amount) || 0) - (Number(b.amount) || 0)) * dir;
-    return (new Date(a.order_date || 0).getTime() - new Date(b.order_date || 0).getTime()) * dir;
+    return ((toDate(a.order_date)?.getTime() || 0) - (toDate(b.order_date)?.getTime() || 0)) * dir;
   });
 
   if (!customer) return null;
@@ -107,7 +118,7 @@ export default function CustomerDetailDialog({ customer, onClose }) {
               ) : sorted.map((o) => (
                 <tr key={o.id} className="border-t">
                   <td className="p-2 font-mono text-xs">{o.order_number}</td>
-                  <td className="p-2 text-xs text-muted-foreground">{o.order_date ? new Date(o.order_date).toLocaleString() : '—'}</td>
+                  <td className="p-2 text-xs text-muted-foreground">{(() => { const d = toDate(o.order_date); return d ? d.toLocaleString() : '—'; })()}</td>
                   <td className="p-2 text-xs">{o.store_name || '—'}</td>
                   <td className="p-2 text-right font-medium">{money(o.amount)}</td>
                 </tr>

@@ -116,7 +116,7 @@ export default async function(req) {
         amount: parsed.amount || 0,
         store_name: parsed.store,
         order_type: parsed.orderType,
-        order_date: parsed.placedOn,
+        order_date: new Date(parsed.eventTime * 1000).toISOString(),
         gmail_message_id: msgId,
         meta_event_id: parsed.orderNo,
         status,
