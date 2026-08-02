@@ -19,6 +19,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
   const [genError, setGenError] = useState(null);
   const [videoPrompt, setVideoPrompt] = useState('');
   const [videoRatio, setVideoRatio] = useState('9:16');
+  const [showVideoGen, setShowVideoGen] = useState(false);
 
   const firstImage = assets.find((a) => a.kind === 'image');
 
@@ -157,39 +158,51 @@ export default function MultiAssetUploader({ assets, onAssets }) {
         )}
       </div>
 
-      <div className="rounded-md border border-dashed p-3 space-y-2 bg-muted/30">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Film className="h-4 w-4" /> AI video from text prompt
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-9"
+        onClick={() => setShowVideoGen((v) => !v)}
+      >
+        <Film className="h-4 w-4 mr-2" /> {showVideoGen ? 'Hide AI video generator' : 'AI video from text prompt'}
+      </Button>
+
+      {showVideoGen && (
+        <div className="rounded-md border border-dashed p-3 space-y-2 bg-muted/30">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Film className="h-4 w-4" /> AI video from text prompt
+          </div>
+          <Textarea
+            placeholder="Describe the motion, e.g. 'steam rising off a fresh Hellcrust pizza, slow push-in, melted cheese stretch'"
+            value={videoPrompt}
+            onChange={(e) => setVideoPrompt(e.target.value)}
+            rows={2}
+            className="text-sm"
+          />
+          <div className="flex items-center gap-2">
+            <Select value={videoRatio} onValueChange={setVideoRatio}>
+              <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {VIDEO_RATIOS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              size="sm"
+              className="h-9"
+              disabled={busy || !videoPrompt.trim()}
+              onClick={generateVideo}
+            >
+              {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+              {busy ? 'Generating video…' : 'Generate video'}
+            </Button>
+            <span className="text-[11px] text-muted-foreground">~30–60s · 6s clip · uses AI credits</span>
+          </div>
         </div>
-        <Textarea
-          placeholder="Describe the motion, e.g. 'steam rising off a fresh Hellcrust pizza, slow push-in, melted cheese stretch'"
-          value={videoPrompt}
-          onChange={(e) => setVideoPrompt(e.target.value)}
-          rows={2}
-          className="text-sm"
-        />
-        <div className="flex items-center gap-2">
-          <Select value={videoRatio} onValueChange={setVideoRatio}>
-            <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {VIDEO_RATIOS.map((r) => (
-                <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            size="sm"
-            className="h-9"
-            disabled={busy || !videoPrompt.trim()}
-            onClick={generateVideo}
-          >
-            {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-            {busy ? 'Generating video…' : 'Generate video'}
-          </Button>
-          <span className="text-[11px] text-muted-foreground">~30–60s · 6s clip · uses AI credits</span>
-        </div>
-      </div>
+      )}
 
       {genError && (
         <p className="text-xs text-destructive">{genError}</p>
