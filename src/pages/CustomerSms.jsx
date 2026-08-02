@@ -33,6 +33,7 @@ export default function CustomerSms() {
   const [loadingChat, setLoadingChat] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [sendingChat, setSendingChat] = useState(false);
+  const [retrying, setRetrying] = useState(null);
   const [lastRead, setLastRead] = useState(() => { try { return JSON.parse(localStorage.getItem('sms_last_read') || '{}'); } catch { return {}; } });
 
   const loadCustomers = async () => {
@@ -179,7 +180,30 @@ export default function CustomerSms() {
     }
   };
 
-
+  const retrySend = async (h) => {
+    if (!h.customer_phone || !h.message) return;
+    setRetrying(h.id);
+    try {
+      const res = await base44.functions.invoke('sendOrderSMS', {
+        action: 'send',
+        recipients: [{
+          order_number: h.order_number,
+          customer_name: h.customer_name,
+          customer_phone: h.customer_phone,
+          store_name: h.store_name || '',
+        }],
+        message: h.message,
+        date: h.campaign_date || new Date().toISOString().slice(0, 10),
+      });
+      const { sent, failed } = res.data;
+      toast({ title: sent ? 'Retry sent' : 'Retry failed', description: sent ? 'Message delivered to ' + h.customer_phone : 'Send failed again', variant: sent ? 'default' : 'destructive' });
+      await loadHistory();
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Retry failed', description: e.response?.data?.error || e.message });
+    } finally {
+      setRetrying(null);
+    }
+  };
 
   return (
     <div className="p-6 space-y-6 max-w-5xl">
@@ -282,6 +306,7 @@ export default function CustomerSms() {
                     <th className="text-left p-2 font-medium">Message</th>
                     <th className="text-left p-2 font-medium">Status</th>
                     <th className="text-left p-2 font-medium">Source</th>
+                    <th className="w-24 p-2"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -293,6 +318,14 @@ export default function CustomerSms() {
                       <td className="p-2 max-w-xs truncate text-muted-foreground">{h.message}</td>
                       <td className="p-2">{h.status === 'sent' ? <Badge>sent</Badge> : <Badge variant="destructive">failed</Badge>}</td>
                       <td className="p-2"><Badge variant="outline">{h.source}</Badge></td>
+                      <td className="p-2">
+                        {h.status === 'failed' && (
+                          <Button size="sm" variant="outline" disabled={retrying === h.id} onClick={() => retrySend(h)}>
+                            {retrying === h.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                            Retry
+                          </Button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
