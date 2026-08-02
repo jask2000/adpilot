@@ -54,6 +54,14 @@ export default function Media() {
 
   const isUsed = (hash) => usedHashes.has(hash);
 
+  const ratioLabel = (m) => {
+    if (!m.width || !m.height) return '';
+    const w = m.width, h = m.height;
+    const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+    const g = gcd(w, h);
+    return `${w / g}:${h / g}`;
+  };
+
   const toggle = (hash) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -250,6 +258,11 @@ export default function Media() {
                       loading="lazy"
                       className="h-full w-full object-cover"
                     />
+                    {ratioLabel(m) && (
+                      <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                        {ratioLabel(m)}
+                      </span>
+                    )}
                     {used ? (
                       <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-md bg-black/60 text-white text-[10px] font-medium px-1.5 py-0.5">
                         <ShieldCheck className="h-3 w-3" /> In use
