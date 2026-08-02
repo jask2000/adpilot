@@ -33,6 +33,7 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
   const [results, setResults] = useState([]);
   const [loadingTargeting, setLoadingTargeting] = useState(false);
   const [fullAudience, setFullAudience] = useState(null);
+  const [targetingAccessible, setTargetingAccessible] = useState(true);
   const debounceRef = useRef();
 
   const applyTargeting = (aud) => {
@@ -85,9 +86,10 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
           });
           const aud = res.data.audience;
           setFullAudience(aud);
-          applyTargeting(aud);
+          setTargetingAccessible(aud.targeting_accessible !== false);
+          if (aud.targeting_accessible !== false) applyTargeting(aud);
         } catch (e) {
-          setError(e.message);
+          setError(e.response?.data?.error || e.message);
         } finally {
           setLoadingTargeting(false);
         }
@@ -109,7 +111,7 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
       });
       setResults(res.data.results || []);
     } catch (e) {
-      setError(e.message);
+      setError(e.response?.data?.error || e.message);
     } finally {
       setSearching(false);
     }
@@ -179,8 +181,8 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
         name: form.name,
         description: form.description,
       };
-      if (audience.kind === 'saved') {
-        const t = { ...((fullAudience || audience).targeting || {}) };
+      if (audience.kind === 'saved' && fullAudience?.targeting) {
+        const t = { ...fullAudience.targeting };
         const gl = { ...(t.geo_locations || {}) };
         if (geo.countries.length) gl.countries = geo.countries; else delete gl.countries;
         if (geo.cities.length) gl.cities = geo.cities.map((c) => ({ key: c.key, name: c.name, radius: c.radius, distance_unit: 'kilometer' })); else delete gl.cities;
@@ -198,7 +200,7 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
       await base44.functions.invoke('metaAds', payload);
       onSaved();
     } catch (e) {
-      setError(e.message);
+      setError(e.response?.data?.error || e.message);
     } finally {
       setBusy(false);
     }
@@ -213,7 +215,7 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
         <DialogHeader>
           <DialogTitle>Edit audience</DialogTitle>
           <DialogDescription>
-            Update name, description{isSaved ? ', and targeting' : ''} for this {audience.subtype} audience.
+            Update name, description{isSaved && targetingAccessible ? ', and targeting' : ''} for this {audience.subtype} audience.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={save} className="space-y-4">
@@ -226,7 +228,17 @@ export default function AudienceEditDialog({ audience, onSaved, onClose }) {
             <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
           </div>
 
-          {isSaved && (
+          {isSaved && !targetingAccessible && (
+            <div className="rounded-lg border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-800">
+              <p className="font-medium">Targeting editing unavailable</p>
+              <p className="mt-1 text-amber-700">
+                Reading a saved audience's targeting requires Meta Marketing API Standard Access,
+                which isn't enabled for this app. You can still edit the name and description below.
+              </p>
+            </div>
+          )}
+
+          {isSaved && targetingAccessible && (
             <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Location targeting

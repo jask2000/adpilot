@@ -601,10 +601,18 @@ Deno.serve(async (req) => {
     if (action === 'get_audience') {
       const { audience_id } = body;
       if (!audience_id) return Response.json({ error: 'audience_id required' }, { status: 400 });
+      // Reading a saved audience (and its targeting) by ID requires Marketing API
+      // Standard Access. On dev-level apps Meta returns error #270. Tolerate it
+      // so the dialog can still edit name/description using the list data.
       const r = await fetch(`${GRAPH}/${audience_id}?fields=id,name,description,status,subtype,targeting,approximate_count`, { headers });
       const data: any = await r.json();
-      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
-      return Response.json({ audience: data });
+      if (data.error) {
+        if (data.error.code === 270 || String(data.error.message || '').includes('#270') || String(data.error.message || '').includes('development access level')) {
+          return Response.json({ audience: { targeting_accessible: false } });
+        }
+        return Response.json({ error: data.error.message }, { status: 502 });
+      }
+      return Response.json({ audience: { ...data, targeting_accessible: !!data.targeting } });
     }
 
     if (action === 'create_audience') {
@@ -654,7 +662,17 @@ Deno.serve(async (req) => {
         body: JSON.stringify(updateBody),
       });
       const data: any = await r.json();
-      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      if (data.error) {
+        const msg = String(data.error.message || '');
+        // #3 / #270: Marketing API Standard Access is required to modify saved
+        // audiences. This is a Meta platform gate, not an app bug.
+        if (data.error.code === 3 || data.error.code === 270 || msg.includes('capability') || msg.includes('development access level') || msg.includes('#270')) {
+          return Response.json({
+            error: "Meta requires Marketing API Standard Access to edit saved audiences, which isn't enabled for the connected app. Request Standard Access in your Meta App Dashboard (App Review → add the Marketing API Standard Access feature), or connect your own Meta app that already has it.",
+          }, { status: 403 });
+        }
+        return Response.json({ error: msg }, { status: 502 });
+      }
       return Response.json({ success: true });
     }
 
