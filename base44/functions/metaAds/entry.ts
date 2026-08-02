@@ -1097,10 +1097,12 @@ Deno.serve(async (req) => {
         } catch (_e) { /* fall through */ }
       }
 
-      // 2. Try page-edge delete with user token
-      if (pageId && !pageToken) {
+      // 2. Try page-edge delete — use the Page access token when we have one
+      //    (videos are Page-owned, so the Page token is what Meta needs).
+      if (pageId) {
+        const pageHeaders = { 'Authorization': `Bearer ${pageToken || accessToken}` };
         try {
-          const r = await fetch(`${GRAPH}/${pageId}/videos/${video_id}`, { method: 'DELETE', headers });
+          const r = await fetch(`${GRAPH}/${pageId}/videos/${video_id}`, { method: 'DELETE', headers: pageHeaders });
           const d: any = await r.json();
           if (!d.error) return Response.json({ success: true });
         } catch (_e) { /* fall through */ }
