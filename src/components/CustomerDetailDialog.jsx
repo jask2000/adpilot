@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronRight } from 'lucide-react';
 
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const norm = (p) => String(p || '').replace(/\D/g, '');
@@ -10,6 +10,7 @@ const norm = (p) => String(p || '').replace(/\D/g, '');
 export default function CustomerDetailDialog({ customer, onClose }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(null);
 
   useEffect(() => {
     if (!customer) return;
@@ -88,13 +89,50 @@ export default function CustomerDetailDialog({ customer, onClose }) {
               ) : orders.length === 0 ? (
                 <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">No order history found.</td></tr>
               ) : orders.map((o) => (
-                <tr key={o.id} className="border-t">
-                  <td className="p-2 font-mono text-xs">{o.order_number}</td>
-                  <td className="p-2 text-xs text-muted-foreground">{o.order_date ? new Date(o.order_date).toLocaleString() : '—'}</td>
-                  <td className="p-2">{o.store_name || '—'}</td>
-                  <td className="p-2"><Badge variant="outline">{o.order_type || '—'}</Badge></td>
-                  <td className="p-2 text-right font-medium">{money(o.amount)}</td>
-                </tr>
+                <React.Fragment key={o.id}>
+                  <tr
+                    className="border-t cursor-pointer hover:bg-muted/40"
+                    onClick={() => setExpanded(expanded === o.id ? null : o.id)}
+                  >
+                    <td className="p-2 font-mono text-xs">
+                      <span className="inline-flex items-center gap-1">
+                        <ChevronRight className={`h-3 w-3 shrink-0 transition-transform ${expanded === o.id ? 'rotate-90' : ''}`} />
+                        {o.order_number}
+                      </span>
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">{o.order_date ? new Date(o.order_date).toLocaleString() : '—'}</td>
+                    <td className="p-2">{o.store_name || '—'}</td>
+                    <td className="p-2"><Badge variant="outline">{o.order_type || '—'}</Badge></td>
+                    <td className="p-2 text-right font-medium">{money(o.amount)}</td>
+                  </tr>
+                  {expanded === o.id && (
+                    <tr className="bg-muted/20">
+                      <td colSpan={5} className="p-3">
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
+                          <Field label="Order #">{o.order_number}</Field>
+                          <Field label="Customer name">{o.customer_name || '—'}</Field>
+                          <Field label="Email">{o.customer_email || '—'}</Field>
+                          <Field label="Phone">{o.customer_phone || '—'}</Field>
+                          <Field label="Store">{o.store_name || '—'}</Field>
+                          <Field label="Order type">{o.order_type || '—'}</Field>
+                          <Field label="Amount">{money(o.amount)}</Field>
+                          <Field label="Order date">{o.order_date ? new Date(o.order_date).toLocaleString() : '—'}</Field>
+                          <Field label="Meta event ID">{o.meta_event_id || '—'}</Field>
+                          <Field label="Status">
+                            <Badge variant={o.status === 'error' ? 'destructive' : 'secondary'}>{o.status || '—'}</Badge>
+                          </Field>
+                          <Field label="Sent at">{o.sent_at ? new Date(o.sent_at).toLocaleString() : '—'}</Field>
+                          {o.error_message && (
+                            <div className="col-span-2 sm:col-span-3">
+                              <p className="text-muted-foreground">Error message</p>
+                              <p className="text-destructive">{o.error_message}</p>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -109,6 +147,15 @@ function Stat({ label, value }) {
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-muted-foreground">{label}</p>
+      <p className="font-medium truncate">{children}</p>
     </div>
   );
 }
