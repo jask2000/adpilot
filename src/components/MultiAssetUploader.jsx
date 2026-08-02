@@ -5,6 +5,7 @@ import { Upload, Video, X, Sparkles, Loader2, Film } from 'lucide-react';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { base44 } from '@/api/base44Client';
 import { cropToRatio, fitToRatio, getImageDimensions, closestRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
 
@@ -22,6 +23,13 @@ export default function MultiAssetUploader({ assets, onAssets }) {
   const [videoRatio, setVideoRatio] = useState('9:16');
   const [showVideoGen, setShowVideoGen] = useState(false);
   const [preview, setPreview] = useState(null);
+  const [tab, setTab] = useState('img-1:1');
+
+  // One tab per image ratio + one per video ratio.
+  const TABS = [
+    ...ASSET_RATIOS.map((r) => ({ key: 'img-' + r.value, ratio: r.value, kind: 'image', label: r.value + ' image' })),
+    ...VIDEO_RATIOS.map((r) => ({ key: 'vid-' + r.value, ratio: r.value, kind: 'video', label: r.value + ' video' })),
+  ];
 
   const firstImage = assets.find((a) => a.kind === 'image');
 
@@ -226,32 +234,57 @@ export default function MultiAssetUploader({ assets, onAssets }) {
       {genError && (
         <p className="text-xs text-destructive">{genError}</p>
       )}
-      <div className="flex flex-wrap gap-3">
-        {assets.map((a, i) => (
-          <div
-            key={i}
-            className="relative w-24 h-24 rounded-md overflow-hidden border bg-muted cursor-zoom-in"
-            onDoubleClick={() => setPreview(a)}
-            title="Double-click to view"
-          >
-            {a.kind === 'image' ? (
-              <img src={a.base64 || a.url} alt={a.name} className="w-full h-full object-contain pointer-events-none" />
-            ) : (
-              <video src={a.base64 || a.url} className="w-full h-full object-contain pointer-events-none" muted />
-            )}
-            <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 text-center">
-              {a.ratio}
-            </span>
-            <button
-              type="button"
-              onClick={() => remove(i)}
-              className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-destructive"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        ))}
-      </div>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="flex flex-wrap h-auto p-1">
+          {TABS.map((t) => {
+            const count = assets.filter((a) => a.ratio === t.ratio && a.kind === t.kind).length;
+            return (
+              <TabsTrigger key={t.key} value={t.key} className="text-xs gap-1">
+                {t.label}{count > 0 ? <span className="ml-1 rounded-full bg-primary/10 px-1.5 text-[10px]">{count}</span> : null}
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+        {TABS.map((t) => {
+          const items = assets
+            .map((a, i) => ({ a, i }))
+            .filter(({ a }) => a.ratio === t.ratio && a.kind === t.kind);
+          return (
+            <TabsContent key={t.key} value={t.key} className="mt-3">
+              {items.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No {t.kind}s in this ratio yet — add one above.</p>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {items.map(({ a, i }) => (
+                    <div
+                      key={i}
+                      className="relative w-28 h-28 rounded-md overflow-hidden border bg-muted cursor-zoom-in"
+                      onDoubleClick={() => setPreview(a)}
+                      title="Double-click to view"
+                    >
+                      {a.kind === 'image' ? (
+                        <img src={a.base64 || a.url} alt={a.name} className="w-full h-full object-contain pointer-events-none" />
+                      ) : (
+                        <video src={a.base64 || a.url} className="w-full h-full object-contain pointer-events-none" muted />
+                      )}
+                      <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 text-center">
+                        {a.ratio}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => remove(i)}
+                        className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          );
+        })}
+      </Tabs>
 
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
         <DialogContent className="max-w-3xl p-2">
