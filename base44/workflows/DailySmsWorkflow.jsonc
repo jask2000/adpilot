@@ -1,0 +1,47 @@
+{
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 10 * * *",
+      "one_time_date": null,
+      "timezone": "America/Vancouver",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "name": "Daily SMS Runner",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "daily_sms",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "send_sms": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "sendOrderSMS",
+            "args": {
+              "action": "auto_send"
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Send yesterday's thank-you SMS",
+            "description": "Auto-texts yesterday's customers via Twilio"
+          }
+        }
+      }
+    ]
+  },
+  "description": "Sends a thank-you SMS to customers who placed an order yesterday via Twilio"
+}

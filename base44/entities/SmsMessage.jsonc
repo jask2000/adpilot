@@ -1,0 +1,56 @@
+{
+  "name": "SmsMessage",
+  "type": "object",
+  "properties": {
+    "order_number": {
+      "type": "string",
+      "description": "The order this SMS was sent for (de-dup key)"
+    },
+    "customer_name": {
+      "type": "string"
+    },
+    "customer_phone": {
+      "type": "string"
+    },
+    "store_name": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "campaign_date": {
+      "type": "string",
+      "format": "date",
+      "description": "The order date the SMS campaign targeted (YYYY-MM-DD)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "sent",
+        "failed"
+      ],
+      "default": "sent"
+    },
+    "error_message": {
+      "type": "string"
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "auto"
+      ],
+      "default": "manual"
+    }
+  },
+  "required": [
+    "order_number",
+    "customer_phone",
+    "message",
+    "campaign_date"
+  ]
+}
