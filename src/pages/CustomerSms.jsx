@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { MessageSquare, Send, Loader2, RefreshCw, Inbox } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
-const DEFAULT_MSG = 'Thanks for your order at HELLCRUST PIZZA! We hope you enjoyed it. See you again soon — order at hellcrustpizza.com';
+const DEFAULT_MSG = 'Thanks for your order at HELLCRUST PIZZA! 🍕 How was it? Reply with a rating 1-5 (5 = ⭐⭐⭐⭐⭐) and any comments. We appreciate your feedback — see you again soon at hellcrustpizza.com';
 
 export default function CustomerSms() {
   const { toast } = useToast();
