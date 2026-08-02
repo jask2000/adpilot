@@ -1052,27 +1052,89 @@ Deno.serve(async (req) => {
       const r = await fetch(`${GRAPH}/${actId}/advideos?fields=id,title,length,thumbnail_url,created_time,permalink_url,format&limit=200`, { headers });
       const data: any = await r.json();
       if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
-      // Extract pixel dimensions from the largest available format so the UI
-      // can display the aspect ratio badge.
+      // Extract pixel dimensions + a thumbnail URL from the largest format
+      // entry — Meta doesn't return thumbnail_url directly for ad-account
+      // videos, but each format variant carries a "picture" field.
       const videos = (data.data || []).map((v: any) => {
-        let w = 0, h = 0;
+        let w = 0, h = 0, thumb = v.thumbnail_url || '';
         if (Array.isArray(v.format) && v.format.length) {
           for (const f of v.format) {
-            if ((f.width || 0) > w) { w = f.width; h = f.height || h; }
+            if ((f.width || 0) > w) { w = f.width; h = f.height || h; thumb = thumb || f.picture || ''; }
           }
         }
         const { format, ...rest } = v;
-        return { ...rest, width: w, height: h };
+        return { ...rest, width: w, height: h, thumbnail_url: thumb };
       });
       return Response.json({ videos });
     }
 
     if (action === 'delete_video') {
-      const { video_id } = body;
+      const { video_id, account_id } = body;
       if (!video_id) return Response.json({ error: 'video_id required' }, { status: 400 });
-      const r = await fetch(`${GRAPH}/${video_id}`, { method: 'DELETE', headers });
-      const data: any = await r.json();
-      if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
+      // Ad-account videos are Page-owned, so a direct DELETE with the user
+      // token returns (#200) Permissions error. Try multiple strategies:
+      //   1. Page access token from /me/accounts
+      //   2. Page edge DELETE (/{page_id}/videos/{video_id}) with the user token
+      //   3. BYO app-user connector token (if connected)
+      //   4. The shared connector token directly (last resort)
+      const actId = account_id ? (String(account_id).startsWith('act_') ? account_id : `act_${account_id}`) : null;
+
+      // 1. Try /me/accounts for a page access token
+      let pageToken = '';
+      let pageId = '';
+      try {
+        const par = await fetch(`${GRAPH}/me/accounts?fields=id,access_token&limit=10`, { headers });
+        const pdata: any = await par.json();
+        if (pdata.data?.[0]) { pageToken = pdata.data[0].access_token || ''; pageId = pdata.data[0].id; }
+      } catch (_e) { /* fall through */ }
+
+      // Get page_id from the ad account if /me/accounts was empty
+      if (!pageId && actId) {
+        try {
+          const ar = await fetch(`${GRAPH}/${actId}?fields=page_id`, { headers });
+          const ad: any = await ar.json();
+          if (ad.page_id) pageId = ad.page_id;
+        } catch (_e) { /* fall through */ }
+      }
+
+      // 2. Try page-edge delete with user token
+      if (pageId && !pageToken) {
+        try {
+          const r = await fetch(`${GRAPH}/${pageId}/videos/${video_id}`, { method: 'DELETE', headers });
+          const d: any = await r.json();
+          if (!d.error) return Response.json({ success: true });
+        } catch (_e) { /* fall through */ }
+      }
+
+      // 3. Try BYO connector token (app-user or workspace-shared)
+      let byoToken = '';
+      try {
+        const byo = await base44.asServiceRole.connectors.getCurrentAppUserConnection(BYO_META_CONNECTOR_ID);
+        if (byo?.accessToken) byoToken = byo.accessToken;
+      } catch (_e) { /* app-user not connected */ }
+      if (!byoToken) {
+        try {
+          const byo = await base44.asServiceRole.connectors.getWorkspaceConnection(BYO_META_CONNECTOR_ID);
+          if (byo?.accessToken) byoToken = byo.accessToken;
+        } catch (_e) { /* workspace not connected */ }
+      }
+
+      // Try direct DELETE with whichever token we have (page token > BYO > shared)
+      const token = pageToken || byoToken || accessToken;
+      const tokHeaders = { 'Authorization': `Bearer ${token}` };
+
+      // First try the ad-account video edge, then the direct node delete
+      let r = await fetch(`${GRAPH}/${actId}/advideos/${video_id}`, { method: 'DELETE', headers: tokHeaders }).catch(() => null);
+      let data: any = r ? await r.json() : null;
+      if (data && !data.error) return Response.json({ success: true });
+
+      r = await fetch(`${GRAPH}/${video_id}`, { method: 'DELETE', headers: tokHeaders });
+      data = await r.json();
+      if (data.error) {
+        return Response.json({
+          error: `Cannot delete this video with the connected token (${data.error.message}). Videos uploaded to your ad account are owned by your Facebook Page — you can remove them from Facebook's Ad Manager or Meta Business Suite directly.`,
+        }, { status: 502 });
+      }
       return Response.json({ success: true });
     }
 
