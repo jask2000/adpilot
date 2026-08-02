@@ -189,14 +189,29 @@ export default function Audiences() {
                   </SelectContent>
                 </Select>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Meta builds lookalikes from users in the selected country. For
+                city/region targeting, set it at the ad level when using the
+                lookalike.
+              </p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Country</Label>
-                  <Input
-                    value={lk.country}
-                    onChange={(e) => setLk({ ...lk, country: e.target.value })}
-                    placeholder="CA"
-                  />
+                  <Select value={lk.country} onValueChange={(v) => setLk({ ...lk, country: v })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CA">Canada</SelectItem>
+                      <SelectItem value="US">United States</SelectItem>
+                      <SelectItem value="GB">United Kingdom</SelectItem>
+                      <SelectItem value="AU">Australia</SelectItem>
+                      <SelectItem value="DE">Germany</SelectItem>
+                      <SelectItem value="FR">France</SelectItem>
+                      <SelectItem value="IN">India</SelectItem>
+                      <SelectItem value="AE">UAE</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label>Ratio (0-1)</Label>
