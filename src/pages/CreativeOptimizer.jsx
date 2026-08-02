@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { Loader2, Sparkles, AlertCircle, Wand2, CheckCircle2, ImagePlus, X, Video, Trash2 } from 'lucide-react';
 import ReplaceCreative from '@/components/ReplaceCreative';
+import AutoOptimizerPanel from '@/components/AutoOptimizerPanel';
 
 const RATIOS = [
   { value: '1:1', label: '1:1 · Feed', w: 1, h: 1 },
@@ -303,6 +304,8 @@ export default function CreativeOptimizer() {
           </div>
         </CardContent>
       </Card>
+
+      <AutoOptimizerPanel account={account} />
 
       <ReplaceCreative account={account} />
 

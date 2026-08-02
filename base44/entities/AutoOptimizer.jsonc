@@ -1,0 +1,30 @@
+{
+  "name": "AutoOptimizer",
+  "type": "object",
+  "properties": {
+    "campaign_id": {
+      "type": "string"
+    },
+    "campaign_name": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "last_run_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_run_summary": {
+      "type": "string"
+    },
+    "actions_taken": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "campaign_id"
+  ]
+}
