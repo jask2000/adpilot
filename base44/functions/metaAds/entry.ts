@@ -997,14 +997,21 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'upload_video') {
-      const { account_id, video_base64, video_filename, title } = body;
-      if (!account_id || !video_base64) return Response.json({ error: 'account_id and video_base64 required' }, { status: 400 });
+      const { account_id, video_base64, video_url, video_filename, title } = body;
+      if (!account_id || (!video_base64 && !video_url)) return Response.json({ error: 'account_id and video_base64 or video_url required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
       try {
-        const b64 = String(video_base64).split(',').pop() || '';
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        let bytes: Uint8Array;
+        if (video_url) {
+          const fr = await fetch(video_url);
+          const ab = await fr.arrayBuffer();
+          bytes = new Uint8Array(ab);
+        } else {
+          const b64 = String(video_base64).split(',').pop() || '';
+          const binary = atob(b64);
+          bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        }
         const filename = video_filename || `upload_${Date.now()}.mp4`;
         const boundary = 'b44vid' + Math.random().toString().slice(2);
         const head =

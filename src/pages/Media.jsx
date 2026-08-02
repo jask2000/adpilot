@@ -116,16 +116,14 @@ export default function Media() {
     setError(null);
     try {
       for (const file of files) {
-        const b64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
+        // Upload to hosted storage first, then pass the URL to the backend so
+        // the video bytes are fetched server-side — sending large base64 video
+        // payloads through the backend gateway exceeds request-size limits.
+        const up = await base44.integrations.Core.UploadFile({ file });
         await base44.functions.invoke('metaAds', {
           action: 'upload_video',
           account_id: accountId,
-          video_base64: b64,
+          video_url: up.file_url,
           video_filename: file.name,
           title: file.name.replace(/\.[^.]+$/, ''),
         });
