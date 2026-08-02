@@ -11,6 +11,7 @@ export default function Media() {
   const [accountId, setAccountId] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [busyType, setBusyType] = useState(null); // 'image' | 'video' | null
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [usedHashes, setUsedHashes] = useState(new Set());
@@ -84,6 +85,7 @@ export default function Media() {
     e.target.value = '';
     if (!files.length) return;
     setBusy(true);
+    setBusyType('image');
     setError(null);
     try {
       for (const file of files) {
@@ -105,6 +107,7 @@ export default function Media() {
       setError(e.message || 'Upload failed');
     } finally {
       setBusy(false);
+      setBusyType(null);
     }
   };
 
@@ -113,6 +116,7 @@ export default function Media() {
     e.target.value = '';
     if (!files.length) return;
     setBusy(true);
+    setBusyType('video');
     setError(null);
     try {
       for (const file of files) {
@@ -133,6 +137,7 @@ export default function Media() {
       setError(e.message || 'Video upload failed');
     } finally {
       setBusy(false);
+      setBusyType(null);
     }
   };
 
@@ -214,12 +219,12 @@ export default function Media() {
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={() => fileRef.current?.click()} disabled={busy || !accountId}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Upload images
+            {busyType === 'image' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {busyType === 'image' ? 'Uploading…' : 'Upload images'}
           </Button>
           <Button variant="outline" onClick={() => videoRef.current?.click()} disabled={busy || !accountId}>
-            <Video className="h-4 w-4" />
-            Upload videos
+            {busyType === 'video' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
+            {busyType === 'video' ? 'Uploading…' : 'Upload videos'}
           </Button>
         </div>
         <input
