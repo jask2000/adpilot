@@ -326,15 +326,14 @@ export default function MultiAssetUploader({ assets, onAssets }) {
         )}
       </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-9"
-        onClick={() => setShowVideoGen((v) => !v)}
+      <a
+        href="https://davinci.ai/app/video?tab=creations"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm hover:bg-accent"
       >
-        <Film className="h-4 w-4 mr-2" /> {showVideoGen ? 'Hide AI video generator' : 'AI video from text prompt'}
-      </Button>
+        <Film className="h-4 w-4" /> AI video from text prompt
+      </a>
 
       {showVideoGen && (
         <div className="rounded-md border border-dashed p-3 space-y-2 bg-muted/30">
