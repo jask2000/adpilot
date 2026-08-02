@@ -33,13 +33,13 @@
       "cron_expression": null,
       "one_time_date": null,
       "timezone": "UTC",
-      "interval_value": 5,
-      "interval_unit": "minutes",
+      "interval_value": 6,
+      "interval_unit": "hours",
       "interval_anchor": null,
       "ends_type": "never",
       "ends_on_date": null,
       "ends_after_count": null
     }
   },
-  "description": "Scans the order inbox every 5 minutes, parses new online order emails, and sends them as Purchase events to the Meta Conversions API so ad attribution runs on real orders."
+  "description": "Scans the order inbox every 6 hours, parses new online order emails, and sends them as Purchase events to the Meta Conversions API so ad attribution runs on real orders."
 }
