@@ -1,15 +1,24 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Upload, Video, X, Sparkles, Loader2 } from 'lucide-react';
+import { Upload, Video, X, Sparkles, Loader2, Film } from 'lucide-react';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { base44 } from '@/api/base44Client';
 import { cropToRatio, ASSET_RATIOS } from '@/lib/mediaCrop';
+
+const VIDEO_RATIOS = [
+  { value: '9:16', ar: '9:16', label: '9:16 (Stories / Reels)' },
+  { value: '16:9', ar: '16:9', label: '16:9 (Landscape)' },
+];
 
 // Collects multiple images and videos across all common ad ratios.
 // Calls onAssets([{ ratio, kind: 'image'|'video', base64?, url?, name }]).
 export default function MultiAssetUploader({ assets, onAssets }) {
   const [busy, setBusy] = useState(false);
   const [genError, setGenError] = useState(null);
+  const [videoPrompt, setVideoPrompt] = useState('');
+  const [videoRatio, setVideoRatio] = useState('9:16');
 
   const firstImage = assets.find((a) => a.kind === 'image');
 
@@ -35,6 +44,30 @@ export default function MultiAssetUploader({ assets, onAssets }) {
   };
 
   const remove = (i) => onAssets(assets.filter((_, idx) => idx !== i));
+
+  // AI-generate a video from a text prompt (Veo). Adds one 6s video asset.
+  const generateVideo = async () => {
+    if (!videoPrompt.trim()) return;
+    setBusy(true);
+    setGenError(null);
+    try {
+      const vr = await base44.integrations.Core.GenerateVideo({
+        prompt: videoPrompt.trim() +
+          '. Professional food advertising style, appetizing, studio lighting, no people, no text overlay.',
+        duration: 6,
+        aspect_ratio: videoRatio,
+      });
+      onAssets([
+        ...assets,
+        { ratio: videoRatio, kind: 'video', url: vr.url, name: 'ai_video_' + videoRatio.replace(':', 'x') + '.mp4' },
+      ]);
+      setVideoPrompt('');
+    } catch (e) {
+      setGenError((e && e.message) || 'Video generation failed');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // AI-generate each ratio from the first uploaded image (recompose, not crop).
   const generateAllRatios = async () => {
@@ -123,6 +156,41 @@ export default function MultiAssetUploader({ assets, onAssets }) {
           </Button>
         )}
       </div>
+
+      <div className="rounded-md border border-dashed p-3 space-y-2 bg-muted/30">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Film className="h-4 w-4" /> AI video from text prompt
+        </div>
+        <Textarea
+          placeholder="Describe the motion, e.g. 'steam rising off a fresh Hellcrust pizza, slow push-in, melted cheese stretch'"
+          value={videoPrompt}
+          onChange={(e) => setVideoPrompt(e.target.value)}
+          rows={2}
+          className="text-sm"
+        />
+        <div className="flex items-center gap-2">
+          <Select value={videoRatio} onValueChange={setVideoRatio}>
+            <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {VIDEO_RATIOS.map((r) => (
+                <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            size="sm"
+            className="h-9"
+            disabled={busy || !videoPrompt.trim()}
+            onClick={generateVideo}
+          >
+            {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+            {busy ? 'Generating video…' : 'Generate video'}
+          </Button>
+          <span className="text-[11px] text-muted-foreground">~30–60s · 6s clip · uses AI credits</span>
+        </div>
+      </div>
+
       {genError && (
         <p className="text-xs text-destructive">{genError}</p>
       )}
@@ -132,7 +200,7 @@ export default function MultiAssetUploader({ assets, onAssets }) {
             {a.kind === 'image' ? (
               <img src={a.base64 || a.url} alt={a.name} className="w-full h-full object-cover" />
             ) : (
-              <video src={a.base64} className="w-full h-full object-cover" muted />
+              <video src={a.base64 || a.url} className="w-full h-full object-cover" muted />
             )}
             <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 text-center">
               {a.ratio}

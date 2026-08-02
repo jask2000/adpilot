@@ -243,12 +243,21 @@ Deno.serve(async (req) => {
         // 4. Upload each asset → image_hash or video_id (supports base64 OR fetched url)
         const uploaded: any[] = [];
         for (const a of (assets || [])) {
-          if (a.kind === 'video' && a.base64) {
-            const b64 = String(a.base64).split(',').pop() || '';
-            const bin = atob(b64);
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          if (a.kind === 'video') {
+            let bytes: Uint8Array;
             const fn = a.name || `advideo_${Date.now()}.mp4`;
+            if (a.url) {
+              const fr = await fetch(a.url);
+              const ab = await fr.arrayBuffer();
+              bytes = new Uint8Array(ab);
+            } else if (a.base64) {
+              const b64 = String(a.base64).split(',').pop() || '';
+              const bin = atob(b64);
+              bytes = new Uint8Array(bin.length);
+              for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            } else {
+              continue;
+            }
             const bnd = 'b44vid' + Math.random().toString().slice(2);
             const head = `--${bnd}\r\n` + (headline ? `Content-Disposition: form-data; name="title"\r\n\r\n${headline}\r\n--${bnd}\r\n` : '') +
               `Content-Disposition: form-data; name="source"; filename="${fn}"\r\nContent-Type: video/mp4\r\n\r\n`;

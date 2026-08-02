@@ -90,7 +90,7 @@ export default function CreateAdForm({ account }) {
         call_to_action_type: form.cta,
         audience_id: audienceId || null,
         audience_kind: audienceKind || null,
-        assets: assets.map((a) => ({ kind: a.kind, base64: a.base64, name: a.name, ratio: a.ratio })),
+        assets: assets.map((a) => ({ kind: a.kind, base64: a.base64, url: a.url, name: a.name, ratio: a.ratio })),
       });
       setResult(res.data || res);
     } catch (err) {
