@@ -33,6 +33,7 @@ export default function CustomerSms() {
   const [loadingChat, setLoadingChat] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [sendingChat, setSendingChat] = useState(false);
+  const [lastRead, setLastRead] = useState(() => { try { return JSON.parse(localStorage.getItem('sms_last_read') || '{}'); } catch { return {}; } });
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -68,12 +69,11 @@ export default function CustomerSms() {
       for (const r of records || []) {
         const key = normPhone(r.from_phone);
         if (!key) continue;
+        const lr = lastRead[key] ? new Date(lastRead[key]).getTime() : 0;
+        if (new Date(r.received_at || 0).getTime() <= lr) continue; // already read
         const existing = byPhone.get(key);
-        if (!existing || new Date(r.received_at || 0).getTime() > new Date(existing.received_at || 0).getTime()) {
-          byPhone.set(key, { ...r, _count: (existing?._count || 0) + 1 });
-        } else {
-          existing._count = (existing._count || 1) + 1;
-        }
+        if (!existing) byPhone.set(key, { ...r, _count: 1 });
+        else existing._count += 1;
       }
       const grouped = Array.from(byPhone.values()).sort((a, b) => new Date(b.received_at || 0).getTime() - new Date(a.received_at || 0).getTime());
       setReplies(grouped);
@@ -128,6 +128,10 @@ export default function CustomerSms() {
     setChatMessage(`Hi${r.customer_name ? ` ${r.customer_name}` : ''}, thanks for your reply! `);
     setChatOpen(true);
     await loadThread(r.from_phone);
+    const next = { ...lastRead, [normPhone(r.from_phone)]: new Date().toISOString() };
+    setLastRead(next);
+    localStorage.setItem('sms_last_read', JSON.stringify(next));
+    await loadReplies();
   };
 
   const loadThread = async (phone) => {
@@ -310,7 +314,7 @@ export default function CustomerSms() {
         </CardHeader>
         <CardContent>
           {replies.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No replies yet. Once you set the webhook URL in Twilio, inbound messages will appear here.</p>
+            <p className="text-sm text-muted-foreground">No unread replies. New inbound messages from customers will appear here.</p>
           ) : (
             <div className="rounded-md border overflow-hidden">
               <table className="w-full text-sm">
@@ -320,7 +324,7 @@ export default function CustomerSms() {
                     <th className="text-left p-2 font-medium">From</th>
                     <th className="text-left p-2 font-medium">Customer</th>
                     <th className="text-left p-2 font-medium">Latest message</th>
-                    <th className="text-left p-2 font-medium">Msgs</th>
+                    <th className="text-left p-2 font-medium">Unread</th>
                     <th className="w-20 p-2"></th>
                   </tr>
                 </thead>
