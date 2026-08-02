@@ -63,8 +63,8 @@ export default function MultiAssetUploader({ assets, onAssets }) {
   const remove = (i) => onAssets(assets.filter((_, idx) => idx !== i));
 
   // AI-generate a video from a text prompt (Veo), optionally seeded by an
-  // existing image. Since the video model is text-to-video, we describe the
-  // chosen image with an LLM and fold that description into the motion prompt.
+  // existing image. When a start image is selected, the actual image is
+  // uploaded and passed to Veo 3.1's image-to-video endpoint.
   const generateVideo = async () => {
     if (!videoPrompt.trim()) return;
     setBusy(true);
@@ -72,8 +72,10 @@ export default function MultiAssetUploader({ assets, onAssets }) {
     try {
       let prompt = videoPrompt.trim();
       if (useStartImage) {
-        const imgAsset = imageAssets[parseInt(startImageIdx, 10)];
-        if (imgAsset) {
+        // startImageIdx is the index in the original assets array (from the
+        // dropdown values), so look up from assets directly — not imageAssets.
+        const imgAsset = assets[parseInt(startImageIdx, 10)];
+        if (imgAsset && imgAsset.kind === 'image') {
           let srcUrl = imgAsset.url;
           if (!srcUrl && imgAsset.base64) {
             const blob = await (await fetch(imgAsset.base64)).blob();
