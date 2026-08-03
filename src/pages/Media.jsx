@@ -30,8 +30,10 @@ export default function Media() {
     ]);
     setMedia(mediaRes.data?.media || []);
     setUsedHashes(new Set(usedRes.data?.hashes || []));
-    setVideos(vidRes.data?.videos || []);
+    const vids = vidRes.data?.videos || [];
+    setVideos(vids);
     setSelectedVideos(new Set());
+    return { videos: vids };
   };
 
   useEffect(() => {
@@ -176,21 +178,36 @@ export default function Media() {
     setBusy(true);
     setBusyType('video');
     setError(null);
+    const uploadedIds = [];
     try {
       for (const file of files) {
         // Upload to hosted storage first, then pass the URL to the backend so
         // the video bytes are fetched server-side — sending large base64 video
         // payloads through the backend gateway exceeds request-size limits.
         const up = await base44.integrations.Core.UploadFile({ file });
-        await base44.functions.invoke('metaAds', {
+        const res = await base44.functions.invoke('metaAds', {
           action: 'upload_video',
           account_id: accountId,
           video_url: up.file_url,
           video_filename: file.name,
           title: file.name.replace(/\.[^.]+$/, ''),
         });
+        if (res.data?.video_id) uploadedIds.push(res.data.video_id);
       }
-      await loadMedia(accountId);
+      // Meta needs a few seconds to process uploaded videos before they appear
+      // in the advideos list edge. Wait, then reload — and if the new video
+      // still isn't visible, retry once more after a longer wait.
+      await new Promise((r) => setTimeout(r, 4000));
+      let result = await loadMedia(accountId);
+      const missing = uploadedIds.filter((id) => !result.videos.some((v) => v.id === id));
+      if (missing.length) {
+        await new Promise((r) => setTimeout(r, 6000));
+        result = await loadMedia(accountId);
+        const stillMissing = missing.filter((id) => !result.videos.some((v) => v.id === id));
+        if (stillMissing.length) {
+          setError(`${stillMissing.length} video${stillMissing.length > 1 ? 's' : ''} uploaded successfully — Meta is still processing ${stillMissing.length > 1 ? 'them' : 'it'}. Refresh in a moment to see ${stillMissing.length > 1 ? 'them' : 'it'} in the library.`);
+        }
+      }
     } catch (e) {
       setError(e.message || 'Video upload failed');
     } finally {
