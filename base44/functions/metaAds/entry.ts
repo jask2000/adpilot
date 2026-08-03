@@ -272,6 +272,10 @@ Deno.serve(async (req) => {
         // 4. Upload each asset → image_hash or video_id (supports base64 OR fetched url)
         const uploaded: any[] = [];
         for (const a of (assets || [])) {
+          // Already-uploaded media from the library — skip re-upload, use the
+          // existing hash / video_id directly.
+          if (a.image_hash) { uploaded.push({ type: 'image_hash', id: a.image_hash }); continue; }
+          if (a.video_id) { uploaded.push({ type: 'video_id', id: a.video_id }); continue; }
           if (a.kind === 'video') {
             let bytes: Uint8Array;
             const fn = a.name || `advideo_${Date.now()}.mp4`;

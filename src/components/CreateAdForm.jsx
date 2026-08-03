@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { Loader2, Upload, CheckCircle2, AlertCircle, Video } from 'lucide-react';
 import MultiAssetUploader from '@/components/MultiAssetUploader';
+import MediaLibraryPicker from '@/components/MediaLibraryPicker';
 
 const OBJECTIVES = [
   { value: 'OUTCOME_AWARENESS', label: 'Awareness' },
@@ -88,7 +89,10 @@ export default function CreateAdForm({ account }) {
       // then send only URLs to the backend — it fetches them server-side.
       const uploadedAssets = [];
       for (const a of assets) {
-        if (a.url) {
+        if (a.image_hash || a.video_id) {
+          // Already in the ad account — no upload needed, pass straight through.
+          uploadedAssets.push(a);
+        } else if (a.url) {
           uploadedAssets.push(a);
         } else if (a.base64) {
           const blob = await (await fetch(a.base64)).blob();
@@ -119,7 +123,14 @@ export default function CreateAdForm({ account }) {
           const loc = storeLocations.find((l) => l.name === name);
           return loc ? { address: loc.address, city: loc.city, province: loc.province, postal_code: loc.postal_code, country: loc.country, radius: parseFloat(radius) || 4 } : null;
         }).filter(Boolean),
-        assets: uploadedAssets.map((a) => ({ kind: a.kind, url: a.url, name: a.name, ratio: a.ratio })),
+        assets: uploadedAssets.map((a) => ({
+          kind: a.kind,
+          url: a.url,
+          name: a.name,
+          ratio: a.ratio,
+          ...(a.image_hash ? { image_hash: a.image_hash } : {}),
+          ...(a.video_id ? { video_id: a.video_id } : {}),
+        })),
       });
       setResult(res.data || res);
     } catch (err) {
@@ -312,6 +323,11 @@ export default function CreateAdForm({ account }) {
               </div>
             </div>
           )}
+
+          <MediaLibraryPicker
+            account={account}
+            onAdd={(picked) => setAssets((prev) => [...prev, ...picked])}
+          />
 
           <MultiAssetUploader assets={assets} onAssets={setAssets} />
 
