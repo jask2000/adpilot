@@ -17,21 +17,29 @@ export default function Media() {
   const [selectedVideos, setSelectedVideos] = useState(new Set());
   const [usedHashes, setUsedHashes] = useState(new Set());
   const [delProgress, setDelProgress] = useState(null);
+  const [videoError, setVideoError] = useState(null);
   const fileRef = useRef(null);
   const videoRef = useRef(null);
 
   const loadMedia = async (actId) => {
     const [mediaRes, usedRes, vidRes] = await Promise.all([
-      base44.functions.invoke('metaAds', { action: 'list_media', account_id: actId }),
+      base44.functions.invoke('metaAds', { action: 'list_media', account_id: actId })
+        .catch((e) => { console.error('list_media failed', e); return { data: { media: [] } }; }),
       base44.functions.invoke('metaAds', { action: 'list_used_image_hashes', account_id: actId })
         .catch(() => ({ data: { hashes: [] } })),
       base44.functions.invoke('metaAds', { action: 'list_videos', account_id: actId })
-        .catch(() => ({ data: { videos: [] } })),
+        .catch((e) => {
+          console.error('list_videos failed', e);
+          const msg = e?.response?.data?.error || e?.message || 'Failed to load videos';
+          setVideoError(msg);
+          return { data: { videos: [] } };
+        }),
     ]);
     setMedia(mediaRes.data?.media || []);
     setUsedHashes(new Set(usedRes.data?.hashes || []));
     const vids = vidRes.data?.videos || [];
     setVideos(vids);
+    if (vids.length) setVideoError(null);
     setSelectedVideos(new Set());
     return { videos: vids };
   };
@@ -480,9 +488,16 @@ export default function Media() {
               <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading videos…
             </div>
           ) : videos.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-16 text-center">
-              No uploaded videos found. Click “Upload videos” to add some.
-            </p>
+            <div className="py-16 text-center">
+              <p className="text-sm text-muted-foreground">
+                No uploaded videos found. Click “Upload videos” to add some.
+              </p>
+              {videoError && (
+                <p className="text-sm text-destructive mt-2">
+                  Last error: {videoError}
+                </p>
+              )}
+            </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {videos.map((v) => {
