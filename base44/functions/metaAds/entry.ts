@@ -1049,12 +1049,18 @@ Deno.serve(async (req) => {
       const { account_id } = body;
       if (!account_id) return Response.json({ error: 'account_id required' }, { status: 400 });
       const actId = String(account_id).startsWith('act_') ? account_id : `act_${account_id}`;
-      const r = await fetch(`${GRAPH}/${actId}/advideos?fields=id,title,length,thumbnail_url,created_time,permalink_url,format&limit=200`, { headers });
-      const data: any = await r.json();
+      // Try with `format` first (needed for thumbnails + dimensions). If Meta
+      // rejects it (e.g. deprecation error on some accounts), fall back to a
+      // simpler field set so videos still load.
+      const fieldsWithFormat = 'id,title,length,thumbnail_url,created_time,permalink_url,format';
+      const fieldsSimple = 'id,title,length,created_time,permalink_url';
+      let r = await fetch(`${GRAPH}/${actId}/advideos?fields=${fieldsWithFormat}&limit=200`, { headers });
+      let data: any = await r.json();
+      if (data.error && String(data.error.message || '').includes('deprecated')) {
+        r = await fetch(`${GRAPH}/${actId}/advideos?fields=${fieldsSimple}&limit=200`, { headers });
+        data = await r.json();
+      }
       if (data.error) return Response.json({ error: data.error.message }, { status: 502 });
-      // Extract pixel dimensions + a thumbnail URL from the largest format
-      // entry — Meta doesn't return thumbnail_url directly for ad-account
-      // videos, but each format variant carries a "picture" field.
       const videos = (data.data || []).map((v: any) => {
         let w = 0, h = 0, thumb = v.thumbnail_url || '';
         if (Array.isArray(v.format) && v.format.length) {
